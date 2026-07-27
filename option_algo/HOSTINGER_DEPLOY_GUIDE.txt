@@ -1,0 +1,797 @@
+═══════════════════════════════════════════════════════════════
+  AlgoBot — Complete Hostinger VPS Deployment Guide
+  For Beginners — Every Step Explained in Detail
+═══════════════════════════════════════════════════════════════
+
+This guide assumes:
+  • You have never used a VPS / Linux server before
+  • You have a Hostinger account
+  • You have the option_algo.zip file on your computer
+  • Your domain name is ready (e.g. algobot.yourdomain.com)
+
+Estimated time to complete: 2–3 hours
+
+═══════════════════════════════════════════════════════════════
+PART 1 — BUY THE RIGHT VPS PLAN ON HOSTINGER
+═══════════════════════════════════════════════════════════════
+
+1. Go to https://www.hostinger.in
+2. Click "VPS Hosting"
+3. Choose plan:
+   - Minimum: KVM 2 (2 vCPU, 8 GB RAM) ← recommended
+   - Better: KVM 4 (4 vCPU, 16 GB RAM) for more users
+4. Select:
+   - Location: Mumbai, India (lowest latency to NSE)
+   - OS: Ubuntu 24.04 LTS  ← IMPORTANT, must select this
+5. Complete payment
+6. Wait 2–5 minutes for the VPS to be created
+
+═══════════════════════════════════════════════════════════════
+PART 2 — CONNECT TO YOUR VPS (SSH)
+═══════════════════════════════════════════════════════════════
+
+SSH is how you type commands into your remote VPS from your laptop.
+
+─── On Windows ───────────────────────────────────────────────
+
+OPTION A: Use Hostinger's built-in terminal (easiest for beginners)
+  1. Go to hPanel (Hostinger control panel)
+  2. Click "VPS" → your server → "Terminal" (or "SSH Terminal")
+  3. It opens a terminal right in your browser — no software needed!
+  ← USE THIS if you're on Windows and it's your first time
+
+OPTION B: Use MobaXterm (free, recommended for Windows)
+  1. Download from: https://mobaxterm.mobatek.net/download.html
+  2. Install and open it
+  3. Click "Session" → "SSH"
+  4. In "Remote host": paste your VPS IP address
+     (find it in Hostinger hPanel → VPS → your server)
+  5. Username: root
+  6. Click OK → it asks for your password
+     (find it in Hostinger hPanel → VPS → your server → "Root password")
+  7. Type the password and press Enter
+     (the password won't show as you type — that's normal)
+
+─── On Mac / Linux ───────────────────────────────────────────
+
+  1. Open Terminal (Mac: press Cmd+Space, type "terminal", press Enter)
+  2. Type this command (replace YOUR_VPS_IP with your actual IP):
+
+     ssh root@YOUR_VPS_IP
+
+  3. It asks "Are you sure you want to continue connecting?" → type: yes
+  4. Enter your root password when prompted
+
+─── How to find your VPS IP and password ─────────────────────
+
+  1. Log in to https://hpanel.hostinger.com
+  2. Click "VPS" in the top menu
+  3. Click on your VPS server
+  4. You'll see:
+     - IPv4 address: this is YOUR_VPS_IP (e.g. 203.55.12.44)
+     - Root password: click the eye icon to reveal it
+
+═══════════════════════════════════════════════════════════════
+PART 3 — INITIAL SERVER SETUP
+═══════════════════════════════════════════════════════════════
+
+Once you're connected (you see a $ or # prompt), run these
+commands one by one. Copy each line, paste it, press Enter,
+wait for it to finish before doing the next one.
+
+TIP: In MobaXterm/terminal, paste with right-click (not Ctrl+V)
+
+─── Step 3.1: Update the server ──────────────────────────────
+
+  apt update && apt upgrade -y
+
+  This takes 2–5 minutes. Wait for it to finish.
+
+─── Step 3.2: Install required software ──────────────────────
+
+  apt install -y python3.12 python3.12-venv python3-pip \
+    postgresql postgresql-contrib \
+    redis-server \
+    nginx \
+    certbot python3-certbot-nginx \
+    git curl unzip ufw
+
+  This installs: Python, the database, Redis (for live updates),
+  nginx (web server), certbot (free SSL), and tools.
+  Takes 3–5 minutes.
+
+─── Step 3.3: Verify everything installed ────────────────────
+
+  python3 --version
+  # Should show: Python 3.12.x
+
+  psql --version
+  # Should show: psql (PostgreSQL) 16.x
+
+  redis-cli ping
+  # Should show: PONG
+
+═══════════════════════════════════════════════════════════════
+PART 4 — CREATE A DEDICATED USER (SECURITY)
+═══════════════════════════════════════════════════════════════
+
+Never run your app as "root". Create a dedicated user:
+
+  useradd -m -s /bin/bash algo_bot
+  usermod -aG sudo algo_bot
+
+  # Set a password for this user (remember it!)
+  passwd algo_bot
+  # Type your new password twice when prompted
+
+═══════════════════════════════════════════════════════════════
+PART 5 — SET UP THE DATABASE (PostgreSQL)
+═══════════════════════════════════════════════════════════════
+
+─── Step 5.1: Start PostgreSQL ───────────────────────────────
+
+  systemctl start postgresql
+  systemctl enable postgresql
+  # "enable" makes it start automatically when VPS reboots
+
+─── Step 5.2: Create database and user ───────────────────────
+
+  # Switch to the postgres system user temporarily
+  sudo -u postgres psql
+
+  # You're now inside the PostgreSQL console (prompt shows "postgres=#")
+  # Run these commands one by one:
+
+  CREATE USER algo_bot WITH PASSWORD 'YourStrongPassword123!';
+  CREATE DATABASE algo_bot OWNER algo_bot;
+  GRANT ALL PRIVILEGES ON DATABASE algo_bot TO algo_bot;
+  \q
+
+  # \q exits the PostgreSQL console
+  # IMPORTANT: Replace 'YourStrongPassword123!' with your own strong password
+  # Write this password down — you'll need it in the .env file
+
+─── Step 5.3: Verify database works ─────────────────────────
+
+  sudo -u postgres psql -c "\l"
+  # Should show a list with "algo_bot" in it
+
+═══════════════════════════════════════════════════════════════
+PART 6 — UPLOAD YOUR PROJECT FILES
+═══════════════════════════════════════════════════════════════
+
+You need to upload option_algo.zip from your laptop to the VPS.
+
+─── Option A: Using Hostinger File Manager (easiest) ─────────
+
+  1. In hPanel → VPS → your server → click "File Manager"
+     (if available — not all plans have this)
+  2. Navigate to /opt/
+  3. Upload option_algo.zip
+
+─── Option B: Using MobaXterm drag-and-drop ──────────────────
+
+  1. In MobaXterm, on the left sidebar you'll see a file browser
+  2. Navigate to /opt/ in that sidebar
+  3. Just drag option_algo.zip from your Windows folder into it
+
+─── Option C: Using SCP command (Mac/Linux terminal) ─────────
+
+  # Run this on YOUR LAPTOP (not the VPS) in a new terminal:
+  scp /path/to/option_algo.zip root@YOUR_VPS_IP:/opt/
+
+  # Example (replace paths and IP):
+  scp ~/Downloads/option_algo.zip root@203.55.12.44:/opt/
+
+─── Option D: Upload to GitHub (intermediate) ────────────────
+
+  Skip this if you're a beginner. Ask later.
+
+─── Step 6.2: Extract the files on the VPS ──────────────────
+
+  # Back in your VPS terminal:
+  cd /opt
+  unzip option_algo.zip
+  mv option_algo /opt/option_algo   # rename if needed
+  ls /opt/option_algo               # should show: backend, frontend, worker.py etc.
+
+  # Give ownership to algo_bot user
+  chown -R algo_bot:algo_bot /opt/option_algo
+
+═══════════════════════════════════════════════════════════════
+PART 7 — SET UP PYTHON ENVIRONMENT
+═══════════════════════════════════════════════════════════════
+
+  cd /opt/option_algo
+
+  # Create a virtual environment (isolated Python for this app)
+  python3.12 -m venv venv
+
+  # Activate it
+  source venv/bin/activate
+  # Your prompt now starts with (venv) — that's correct
+
+  # Install all required packages
+  pip install --upgrade pip
+  pip install -r requirements.txt
+
+  # This takes 3–5 minutes — lots of packages to download
+
+  # Verify FastAPI installed
+  python -c "import fastapi; print('FastAPI OK')"
+  # Should print: FastAPI OK
+
+═══════════════════════════════════════════════════════════════
+PART 8 — CREATE YOUR .env CONFIGURATION FILE
+═══════════════════════════════════════════════════════════════
+
+The .env file holds your private settings. Create it:
+
+  nano /opt/option_algo/.env
+
+  # The "nano" editor opens. Type/paste the following,
+  # replacing EVERY value marked with ← with your actual values.
+
+─────────────────────────────────────────────────────────────
+# PASTE THIS into nano (replace all ← values):
+
+# Security Keys
+SECRET_KEY=paste-a-random-64-character-string-here
+FERNET_KEY=paste-your-fernet-key-here
+
+# Database (use the password you created in Step 5.2)
+DATABASE_URL=postgresql+asyncpg://algo_bot:YourStrongPassword123!@localhost:5432/algo_bot
+
+# Redis (leave as-is — Redis runs locally)
+REDIS_URL=redis://localhost:6379/0
+
+# Your site URL (replace with your actual domain)
+APP_BASE_URL=https://algobot.yourdomain.com
+
+# Admin account (first login)
+ADMIN_EMAIL=your@email.com
+ADMIN_PASSWORD=ChooseAStrongAdminPassword!
+
+# CORS (replace with your domain)
+ALLOWED_ORIGINS=https://algobot.yourdomain.com
+
+# Upstox webhook (generate a secret string)
+WEBHOOK_SECRET=another-random-secret-string-here
+
+# Email (Gmail App Password — see note below)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASSWORD=your-16-char-app-password
+SMTP_FROM=AlgoBot <your@gmail.com>
+
+# Google Sign-In (optional — leave blank to disable)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Upstox redirect (replace domain)
+UPSTOX_REDIRECT_URI=https://algobot.yourdomain.com/api/users/upstox/callback
+
+# Push notifications (generate with: python scripts/generate_vapid_keys.py)
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CLAIM_EMAIL=your@email.com
+
+# Server
+DEBUG=false
+─────────────────────────────────────────────────────────────
+
+  # When done typing in nano:
+  # Press Ctrl+X → press Y → press Enter (this saves and exits)
+
+─── Generate SECRET_KEY ──────────────────────────────────────
+
+  python3 -c "import secrets; print(secrets.token_hex(32))"
+  # Copy the output and paste it as SECRET_KEY in .env
+
+─── Generate FERNET_KEY ──────────────────────────────────────
+
+  python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  # Copy the output and paste it as FERNET_KEY in .env
+
+─── Generate VAPID keys (for push notifications) ────────────
+
+  cd /opt/option_algo
+  source venv/bin/activate
+  python scripts/generate_vapid_keys.py
+  # Copy the VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY into .env
+
+─── Gmail App Password ───────────────────────────────────────
+
+  1. Go to myaccount.google.com → Security
+  2. Enable "2-Step Verification" if not already on
+  3. Go to myaccount.google.com/apppasswords
+  4. Select app: Mail, device: Other → type "AlgoBot" → Generate
+  5. Copy the 16-character password → paste as SMTP_PASSWORD
+  NOTE: Use spaces or not — either works
+
+─── Protect the .env file ────────────────────────────────────
+
+  chmod 600 /opt/option_algo/.env
+  chown algo_bot:algo_bot /opt/option_algo/.env
+
+═══════════════════════════════════════════════════════════════
+PART 9 — INITIALISE THE DATABASE
+═══════════════════════════════════════════════════════════════
+
+  cd /opt/option_algo
+  source venv/bin/activate
+  python scripts/init_db.py
+
+  # You should see output like:
+  # ✅ Tables created
+  # ✅ Admin: your@email.com / YourAdminPassword
+  # ⚠️  Change password after first login!
+
+  # If you see any ERROR — read the error carefully.
+  # Most common: wrong DATABASE_URL in .env (check password/username)
+
+═══════════════════════════════════════════════════════════════
+PART 10 — TEST THAT THE APP RUNS (BEFORE NGINX)
+═══════════════════════════════════════════════════════════════
+
+Let's make sure everything works before setting up the domain.
+
+  cd /opt/option_algo
+  source venv/bin/activate
+
+  # Start the web process (runs in foreground for testing):
+  uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+  # Open a browser on your laptop and go to:
+  # http://YOUR_VPS_IP:8000
+  # You should see the AlgoBot landing page!
+
+  # Press Ctrl+C to stop it when done testing
+
+  # Also test the worker process (open a second terminal/SSH session):
+  cd /opt/option_algo
+  source venv/bin/activate
+  python worker.py
+  # Should print: [worker] AlgoBot worker started — waiting for commands
+  # Press Ctrl+C to stop
+
+  # If either crashes, read the error. Common fixes:
+  # - "No module named X": run pip install -r requirements.txt again
+  # - "Connection refused" (database): check DATABASE_URL in .env
+  # - "Address already in use": something else is on port 8000
+
+═══════════════════════════════════════════════════════════════
+PART 11 — POINT YOUR DOMAIN TO THE VPS
+═══════════════════════════════════════════════════════════════
+
+─── If your domain is ON Hostinger ──────────────────────────
+
+  1. hPanel → Domains → your domain → DNS / Nameservers
+  2. Add a new A record:
+     Type: A
+     Name: algobot  (or @ for root domain, or whatever subdomain)
+     Value: YOUR_VPS_IP
+     TTL: 300
+  3. Click Save
+  4. Wait 5–15 minutes for DNS to propagate
+
+─── If your domain is ELSEWHERE (GoDaddy, Namecheap etc.) ───
+
+  1. Log in to that provider
+  2. Find DNS settings for your domain
+  3. Add A record:
+     Host/Name: algobot (or @ or subdomain)
+     Value/Points to: YOUR_VPS_IP
+     TTL: 300 or lowest available
+  4. Save and wait 15–30 minutes
+
+─── Check if DNS is working ──────────────────────────────────
+
+  # On your laptop terminal/command prompt:
+  nslookup algobot.yourdomain.com
+  # Should show YOUR_VPS_IP in the answer
+
+  # Or visit: https://www.whatsmydns.net
+  # Type your domain and check if it shows your VPS IP worldwide
+
+═══════════════════════════════════════════════════════════════
+PART 12 — SET UP NGINX (REVERSE PROXY)
+═══════════════════════════════════════════════════════════════
+
+Nginx sits in front of your app and handles HTTPS, compression,
+and forwards requests to your Python app.
+
+─── Step 12.1: Create nginx config ───────────────────────────
+
+  nano /etc/nginx/sites-available/algobot
+
+  # Paste this (replace algobot.yourdomain.com with YOUR domain):
+
+─────────────────────────────────────────────────────────────
+server {
+    listen 80;
+    server_name algobot.yourdomain.com;
+
+    # Max upload size (for file uploads if any)
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+}
+─────────────────────────────────────────────────────────────
+
+  # Save: Ctrl+X → Y → Enter
+
+─── Step 12.2: Enable the site ───────────────────────────────
+
+  ln -s /etc/nginx/sites-available/algobot /etc/nginx/sites-enabled/
+  rm /etc/nginx/sites-enabled/default   # remove default nginx page
+  nginx -t                              # test config (should say OK)
+  systemctl restart nginx
+  systemctl enable nginx
+
+─── Step 12.3: Test without SSL first ───────────────────────
+
+  # In your browser: http://algobot.yourdomain.com
+  # Should show the AlgoBot landing page (but "Not Secure")
+  # If it works → proceed to SSL
+
+═══════════════════════════════════════════════════════════════
+PART 13 — FREE SSL CERTIFICATE (HTTPS)
+═══════════════════════════════════════════════════════════════
+
+  # Replace algobot.yourdomain.com with YOUR actual domain:
+  certbot --nginx -d algobot.yourdomain.com
+
+  # Follow the prompts:
+  # - Enter your email address
+  # - Press Y to agree to terms
+  # - Press Y or N for marketing emails (your choice)
+  # - Certbot automatically configures HTTPS in nginx!
+
+  # After it finishes, visit:
+  # https://algobot.yourdomain.com
+  # Should show AlgoBot with a padlock (🔒) in the browser
+
+  # SSL certificates auto-renew. Set up automatic renewal:
+  systemctl enable certbot.timer
+  systemctl start certbot.timer
+
+═══════════════════════════════════════════════════════════════
+PART 14 — SET UP FIREWALL (SECURITY)
+═══════════════════════════════════════════════════════════════
+
+  ufw allow ssh        # keep SSH access
+  ufw allow 80         # HTTP
+  ufw allow 443        # HTTPS
+  ufw enable           # turn on firewall
+  # Type "y" when it asks to confirm
+
+  ufw status           # shows what's allowed
+  # Should show 22 (ssh), 80 (http), 443 (https) as ALLOW
+
+  # NOTE: We do NOT open port 8000 publicly — nginx handles that
+  # internally. Port 8000 is only accessible on localhost.
+
+═══════════════════════════════════════════════════════════════
+PART 15 — SET UP SYSTEMD SERVICES (AUTO-START)
+═══════════════════════════════════════════════════════════════
+
+Systemd services make your app:
+  ✅ Start automatically when the VPS reboots
+  ✅ Restart automatically if it crashes
+  ✅ Run in the background (no open terminal needed)
+
+─── Step 15.1: Install web service ───────────────────────────
+
+  cp /opt/option_algo/scripts/algo_bot-web.service \
+     /etc/systemd/system/algo_bot-web.service
+
+  # Open the file and verify paths are correct:
+  nano /etc/systemd/system/algo_bot-web.service
+
+  # Make sure these lines match your setup:
+  #   User=algo_bot
+  #   WorkingDirectory=/opt/option_algo
+  #   EnvironmentFile=/opt/option_algo/.env
+  #   ExecStart=/opt/option_algo/venv/bin/uvicorn backend.main:app ...
+
+  # Save and exit: Ctrl+X → Y → Enter
+
+─── Step 15.2: Install worker service ────────────────────────
+
+  cp /opt/option_algo/scripts/algo_bot-worker.service \
+     /etc/systemd/system/algo_bot-worker.service
+
+  # Verify paths (same as above):
+  nano /etc/systemd/system/algo_bot-worker.service
+
+─── Step 15.3: Enable and start both services ─────────────────
+
+  systemctl daemon-reload
+
+  systemctl enable algo_bot-web
+  systemctl enable algo_bot-worker
+
+  systemctl start algo_bot-web
+  systemctl start algo_bot-worker
+
+─── Step 15.4: Check they are running ────────────────────────
+
+  systemctl status algo_bot-web
+  # Should show: ● algo_bot-web.service ... Active: active (running)
+
+  systemctl status algo_bot-worker
+  # Should show: ● algo_bot-worker.service ... Active: active (running)
+
+  # If you see "Failed" — check logs:
+  journalctl -u algo_bot-web -n 50
+  journalctl -u algo_bot-worker -n 50
+  # Read the last few lines for the error
+
+═══════════════════════════════════════════════════════════════
+PART 16 — FIRST LOGIN AND INITIAL SETUP
+═══════════════════════════════════════════════════════════════
+
+  1. Open your browser
+  2. Go to: https://algobot.yourdomain.com
+  3. You'll see the AlgoBot landing page ✅
+  4. Click "Get Started" or go to /login
+  5. Accept the risk disclaimer ← you must tick the checkbox
+  6. Log in with the admin email/password you set in .env
+  7. You should see the dashboard
+
+  FIRST THINGS TO DO AFTER LOGIN:
+  ────────────────────────────────
+  a) Go to Settings → change your admin password
+  b) Go to Settings → Upstox Connection → enter your API Key
+     and API Secret (from account.upstox.com/developer/apps)
+     Add redirect URI: https://algobot.yourdomain.com/api/users/upstox/callback
+  c) Click "Connect to Upstox" → log in on Upstox → you get redirected back
+  d) Go to Settings → Bot Configuration:
+     - Select symbol (NIFTY / BANKNIFTY)
+     - Set Number of Lots (e.g. 1)
+     - Set risk limits
+  e) ALWAYS START IN PAPER MODE FIRST
+     Dashboard → Start Bot (📄 PAPER mode is default)
+
+═══════════════════════════════════════════════════════════════
+PART 17 — REGISTER THE UPSTOX WEBHOOK
+═══════════════════════════════════════════════════════════════
+
+This makes order confirmations arrive in under 200ms instead of
+1–3 seconds of polling.
+
+  1. Go to account.upstox.com/developer/apps
+  2. Click on your app
+  3. Find "Webhook" or "Postback" settings
+  4. Set URL: https://algobot.yourdomain.com/api/webhook/upstox
+  5. Set the Postback Secret to whatever you put in WEBHOOK_SECRET
+     in your .env file
+  6. Save
+
+  Test it: https://algobot.yourdomain.com/api/webhook/upstox/test
+  Should return: {"status":"ok"}
+
+═══════════════════════════════════════════════════════════════
+PART 18 — DAILY OPERATIONS
+═══════════════════════════════════════════════════════════════
+
+EVERY MORNING BEFORE 9:15 AM:
+
+  1. Open https://algobot.yourdomain.com/settings
+  2. Under "Upstox Connection" → click "Refresh Token"
+     (Upstox tokens expire daily at ~3:30 AM IST)
+  3. Log in on Upstox when prompted → redirected back
+  4. Token shows "✅ Connected"
+  5. Go to Dashboard → click "Start Bot"
+
+MONITORING THE BOT:
+
+  # View live logs (run in SSH terminal):
+  journalctl -u algo_bot-worker -f
+  # -f means "follow" = live updates. Press Ctrl+C to stop
+
+  journalctl -u algo_bot-web -f
+  # For web server logs
+
+STOPPING THE BOT:
+
+  # From Dashboard → click "Stop Bot" (clean way)
+  # Or via SSH:
+  systemctl stop algo_bot-web algo_bot-worker
+
+STARTING THE BOT AFTER A REBOOT:
+
+  # Should start automatically. Verify:
+  systemctl status algo_bot-web algo_bot-worker
+
+═══════════════════════════════════════════════════════════════
+PART 19 — REBOOT TEST
+═══════════════════════════════════════════════════════════════
+
+Always test that everything auto-starts after a reboot:
+
+  reboot
+  # VPS reboots — wait 1–2 minutes
+
+  # Reconnect via SSH after reboot, then check:
+  systemctl status algo_bot-web algo_bot-worker
+  # Both should show "active (running)"
+
+  # Visit your site — should work without you doing anything
+
+═══════════════════════════════════════════════════════════════
+PART 20 — COMMON PROBLEMS AND FIXES
+═══════════════════════════════════════════════════════════════
+
+PROBLEM: Site shows "502 Bad Gateway"
+FIX:
+  systemctl status algo_bot-web
+  # If stopped: systemctl start algo_bot-web
+  # If failed: journalctl -u algo_bot-web -n 30 → read the error
+
+PROBLEM: "Internal Server Error" on the site
+FIX:
+  journalctl -u algo_bot-web -n 50
+  # Look for "ERROR" lines near the bottom
+
+PROBLEM: Bot not starting / Dashboard says "Error"
+FIX:
+  journalctl -u algo_bot-worker -n 50
+  # Look for the actual error
+
+PROBLEM: Upstox token error / bot crashes at 3:30 AM
+FIX: Refresh token every morning (see Part 18). This is expected
+     — Upstox doesn't provide persistent tokens.
+
+PROBLEM: Database connection error
+FIX:
+  systemctl status postgresql
+  # If stopped: systemctl start postgresql
+  # Check DATABASE_URL in .env matches what you set in Part 5.2
+
+PROBLEM: Redis error
+FIX:
+  systemctl status redis-server
+  # If stopped: systemctl start redis-server
+  redis-cli ping   # should return PONG
+
+PROBLEM: "Permission denied" errors
+FIX:
+  chown -R algo_bot:algo_bot /opt/option_algo
+
+PROBLEM: SSL certificate expired (after 90 days)
+FIX: Should auto-renew. To manually renew:
+  certbot renew
+  systemctl restart nginx
+
+PROBLEM: Can't connect via SSH after enabling firewall
+FIX: You locked yourself out!
+  • Use Hostinger's browser-based terminal (hPanel → VPS → Terminal)
+  • Run: ufw allow ssh
+  • Then reconnect normally
+
+═══════════════════════════════════════════════════════════════
+PART 21 — USEFUL COMMANDS CHEAT SHEET
+═══════════════════════════════════════════════════════════════
+
+VIEW LIVE LOGS:
+  journalctl -u algo_bot-worker -f      # worker (trading engine)
+  journalctl -u algo_bot-web -f         # web server
+
+START/STOP/RESTART:
+  systemctl start   algo_bot-web algo_bot-worker
+  systemctl stop    algo_bot-web algo_bot-worker
+  systemctl restart algo_bot-web algo_bot-worker
+
+CHECK STATUS:
+  systemctl status algo_bot-web
+  systemctl status algo_bot-worker
+
+CHECK ALL SERVICES:
+  systemctl status postgresql redis-server nginx
+
+TEST WEBSITE:
+  curl http://localhost:8000/health
+  # Should return: {"status":"ok","database":"ok","redis":"ok"}
+
+VIEW DISK USAGE:
+  df -h
+
+VIEW MEMORY USAGE:
+  free -h
+
+VIEW CPU:
+  top
+  # Press Q to quit
+
+EDIT .env FILE:
+  nano /opt/option_algo/.env
+  # After editing, restart both services:
+  systemctl restart algo_bot-web algo_bot-worker
+
+RUN DATABASE MIGRATION (after updates):
+  cd /opt/option_algo
+  source venv/bin/activate
+  python scripts/init_db.py
+
+═══════════════════════════════════════════════════════════════
+PART 22 — UPDATING THE APP (WHEN YOU GET NEW CODE)
+═══════════════════════════════════════════════════════════════
+
+When you receive an updated option_algo.zip:
+
+  1. Upload the new zip to /opt/ (same as Part 6)
+
+  2. In SSH terminal:
+     cd /opt
+     systemctl stop algo_bot-web algo_bot-worker
+     mv option_algo option_algo_backup    # keep old version as backup
+     unzip option_algo.zip
+     chown -R algo_bot:algo_bot /opt/option_algo
+
+  3. Copy your existing .env (don't overwrite it!):
+     cp /opt/option_algo_backup/.env /opt/option_algo/.env
+
+  4. Update Python packages:
+     cd /opt/option_algo
+     source venv/bin/activate
+     pip install -r requirements.txt
+
+  5. Run database migration:
+     python scripts/init_db.py
+
+  6. Restart services:
+     systemctl start algo_bot-web algo_bot-worker
+
+  7. Verify:
+     systemctl status algo_bot-web algo_bot-worker
+     curl http://localhost:8000/health
+
+═══════════════════════════════════════════════════════════════
+SECURITY CHECKLIST — DO BEFORE GOING LIVE
+═══════════════════════════════════════════════════════════════
+
+  ☐ Changed ADMIN_PASSWORD from the default in .env
+  ☐ SECRET_KEY is a long random string (not "changeme")
+  ☐ FERNET_KEY is properly generated
+  ☐ WEBHOOK_SECRET is set (not blank)
+  ☐ DEBUG=false in .env
+  ☐ ALLOWED_ORIGINS is set to your domain (not *)
+  ☐ .env file has permissions 600 (chmod 600 .env)
+  ☐ Firewall is enabled (ufw status shows active)
+  ☐ Port 8000 is NOT open in firewall (nginx handles it)
+  ☐ SSL certificate installed (https:// works)
+  ☐ Changed admin password in Settings after first login
+
+═══════════════════════════════════════════════════════════════
+SUPPORT
+═══════════════════════════════════════════════════════════════
+
+If something goes wrong:
+  1. Read the error message in the logs (journalctl -u algo_bot-worker -n 50)
+  2. The error message usually tells you exactly what's wrong
+  3. Google the exact error message — most Linux/Python errors
+     have solved answers on Stack Overflow
+
+Common things beginners miss:
+  • Forgetting to replace placeholder values in .env
+  • Database password mismatch between Step 5.2 and .env
+  • Not refreshing the Upstox token before 9:15 AM
+  • Starting the bot in LIVE mode without testing in paper first
+
+═══════════════════════════════════════════════════════════════
+END OF GUIDE
+═══════════════════════════════════════════════════════════════

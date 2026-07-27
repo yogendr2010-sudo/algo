@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Claim Your 7 Days Free Paper Trading — AlgoBot{% endblock %}
+{% block content %}
+<div class="page-wrap" style="max-width: 600px; margin: 0 auto; padding: 20px 0;">
+  <h1>Claim Your 7 Days Free Paper Trading</h1>
+  
+  <div id="campaign-info" class="card" style="margin-bottom: 20px; display: none;">
+    <h2 id="campaign-title">🎁 Get 7 Days FREE Paper Trading</h2>
+    <p id="campaign-desc" class="muted" style="margin-top: 8px;"></p>
+    <div id="terms-box" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; display: none;">
+      <b>Terms & Conditions:</b>
+      <p id="campaign-terms" class="muted" style="white-space: pre-wrap; margin-top: 4px; font-size: 13px;"></p>
+    </div>
+  </div>
+
+  <!-- Status / Messages -->
+  <div id="status-card" class="card" style="display: none; margin-bottom: 20px;">
+    <h2 id="status-title">Request Status</h2>
+    <div id="status-body" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Submission Form -->
+  <div id="form-card" class="card">
+    <h2>Submit Request</h2>
+    <p class="muted" style="margin-top: 4px; margin-bottom: 16px;">
+      After your Upstox account has been activated, enter your Client ID below. Our team will manually verify your account. Once approved, your free Paper Trading reward will be activated automatically.
+    </p>
+
+    <form id="claim-form" onsubmit="submitClaim(event)">
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; font-weight: 600; margin-bottom: 6px;">Upstox Client ID <span style="color: var(--red);">*</span></label>
+        <input type="text" id="client-id" class="inp" placeholder="e.g. 123456" required style="width: 100%; text-transform: uppercase;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; font-weight: 600; margin-bottom: 6px;">Comments <span class="muted">(Optional)</span></label>
+        <textarea id="comments" class="inp" rows="3" placeholder="Enter any comments or references..." style="width: 100%; font-family: var(--font-sans);"></textarea>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; line-height: 1.4;">
+          <input type="checkbox" id="confirm-link" required style="margin-top: 3px;">
+          <span>I confirm that I opened my Upstox account using the official partner referral link provided by this platform. <span style="color: var(--red);">*</span></span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary" style="width: 100%;">Submit Request</button>
+    </form>
+    <div id="form-msg" class="msg" style="margin-top: 12px; display: none;"></div>
+  </div>
+
+  <!-- Success State -->
+  <div id="success-card" class="card" style="display: none; text-align: center; padding: 30px 20px;">
+    <div style="font-size: 48px; margin-bottom: 16px;">✉️</div>
+    <h2 style="color: var(--green); margin-bottom: 10px;">Request Submitted Successfully</h2>
+    <p class="muted" style="margin-bottom: 20px; font-size: 15px;">
+      Your request has been submitted successfully.<br>Our team will verify your Upstox Client ID.<br>Once approved, your 7 Days of FREE Paper Trading will be activated.
+    </p>
+    <a href="/dashboard" class="btn-primary" style="display: inline-block; text-decoration: none;">Go to Dashboard</a>
+  </div>
+</div>
+
+<style>
+.inp {
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+.inp:focus {
+  border-color: var(--blue);
+}
+.btn-primary {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+.btn-primary:hover {
+  opacity: 0.9;
+}
+.msg {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.msg.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+.msg.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+.badge-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.badge-status.pending {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid var(--amber);
+  color: var(--amber);
+}
+.badge-status.verified {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
+.badge-status.rejected {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadCampaignAndRequest();
+});
+
+async function loadCampaignAndRequest() {
+  // Load Campaign Settings
+  const settingsResp = await apiFetch('/api/campaign/settings');
+  if (!settingsResp || !settingsResp.ok) return;
+  const settings = await settingsResp.json();
+  
+  if (settings.enable_campaign) {
+    document.getElementById('campaign-info').style.display = 'block';
+    document.getElementById('campaign-title').innerText = settings.campaign_title;
+    document.getElementById('campaign-desc').innerText = settings.campaign_description;
+    if (settings.terms_conditions) {
+      document.getElementById('terms-box').style.display = 'block';
+      document.getElementById('campaign-terms').innerText = settings.terms_conditions;
+    }
+  }
+
+  // Load My Request
+  const reqResp = await apiFetch('/api/campaign/my-request');
+  if (!reqResp || !reqResp.ok) return;
+  const req = await reqResp.json();
+
+  if (req) {
+    document.getElementById('form-card').style.display = 'none';
+    const statusCard = document.getElementById('status-card');
+    const statusBody = document.getElementById('status-body');
+    statusCard.style.display = 'block';
+
+    if (req.status === 'Pending') {
+      statusBody.innerHTML = `
+        <span class="badge-status pending">Pending</span>
+        <div style="font-size: 15px; font-weight: 600;">Verification Status: Pending</div>
+        <p class="muted" style="margin-top: 6px;">Your request is currently under review. Client ID: <b>${req.client_id}</b></p>
+      `;
+    } else if (req.status === 'Verified') {
+      statusBody.innerHTML = `
+        <span class="badge-status verified">✅ Reward Activated</span>
+        <div style="font-size: 15px; font-weight: 600;">Paper Trading Active</div>
+        <p class="muted" style="margin-top: 6px;">Client ID: <b>${req.client_id}</b></p>
+        <p style="margin-top: 10px; font-size: 13px;">
+          <b>Start Date:</b> ${new Date(req.reward_start_date).toLocaleDateString()}<br>
+          <b>Expiry Date:</b> ${new Date(req.reward_end_date).toLocaleDateString()}
+        </p>
+      `;
+    } else if (req.status === 'Rejected') {
+      statusBody.innerHTML = `
+        <span class="badge-status rejected">❌ Verification Failed</span>
+        <div style="font-size: 15px; font-weight: 600;">Reason provided by Admin:</div>
+        <p style="background: rgba(239, 68, 68, 0.05); padding: 10px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2); margin-top: 6px; color: var(--red);">${req.admin_notes || 'No reason provided.'}</p>
+        <div style="margin-top: 16px;">
+          <button onclick="showForm()" class="btn-primary">Submit New Request</button>
+        </div>
+      `;
+    }
+  }
+}
+
+function showForm() {
+  document.getElementById('status-card').style.display = 'none';
+  document.getElementById('form-card').style.display = 'block';
+  document.getElementById('client-id').value = '';
+  document.getElementById('comments').value = '';
+  document.getElementById('confirm-link').checked = false;
+}
+
+async function submitClaim(e) {
+  e.preventDefault();
+  const formMsg = document.getElementById('form-msg');
+  formMsg.style.display = 'none';
+
+  const clientId = document.getElementById('client-id').value;
+  const comments = document.getElementById('comments').value;
+  const confirmLink = document.getElementById('confirm-link').checked;
+
+  if (!confirmLink) {
+    showMsg('You must check the box to confirm.', 'error');
+    return;
+  }
+
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  btn.innerText = 'Submitting...';
+
+  try {
+    const resp = await apiFetch('/api/campaign/submit', {
+      method: 'POST',
+      body: JSON.stringify({
+        client_id: clientId,
+        comments: comments,
+        confirm_link: confirmLink
+      })
+    });
+
+    if (!resp) {
+      showMsg('Failed to submit request (Unauthorized).', 'error');
+      return;
+    }
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      showMsg(data.detail || 'An error occurred during submission.', 'error');
+    } else {
+      document.getElementById('form-card').style.display = 'none';
+      document.getElementById('status-card').style.display = 'none';
+      document.getElementById('success-card').style.display = 'block';
+    }
+  } catch (err) {
+    console.error(err);
+    showMsg('An error occurred. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Submit Request';
+  }
+}
+
+function showMsg(text, type) {
+  const formMsg = document.getElementById('form-msg');
+  formMsg.innerText = text;
+  formMsg.className = 'msg ' + type;
+  formMsg.style.display = 'block';
+}
+</script>
+{% endblock %}

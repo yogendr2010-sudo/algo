@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% set show_nav = false %}
+{% block title %}Login — AlgoBot{% endblock %}
+{% block content %}
+
+<!-- ============ RISK DISCLAIMER MODAL ============
+     Must be accepted (checkbox + Continue) before the login form
+     becomes usable. Shown on every visit unless previously accepted
+     on this browser (localStorage) — re-prompts on a new device/
+     browser/after clearing site data, which is intentional for a
+     live-trading product. -->
+<div id="disclaimer-overlay" class="disclaimer-overlay">
+  <div class="disclaimer-modal" role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
+    <div class="disclaimer-icon">⚠️</div>
+    <h2 id="disclaimer-title">Risk Disclosure</h2>
+    <div class="disclaimer-body">
+      <p>Before you continue, please read and accept the following:</p>
+      <ul>
+        <li>Trading in options carries a <b>substantial risk of loss</b> and is not suitable for every investor.</li>
+        <li>Past performance of any strategy — automated or manual — is <b>not indicative of future results</b>.</li>
+        <li>AlgoBot is an <b>execution tool</b> that places orders on your behalf via your own Upstox account. It does <b>not</b> provide investment advice or any guarantee of profit.</li>
+        <li>All trading decisions, configurations, and outcomes — including losses — remain <b>your sole responsibility</b>.</li>
+        <li>You should start in <b>Paper Trading mode</b> and fully understand a strategy's behavior before enabling live orders.</li>
+        <li>Software, exchanges, brokers, and internet connections can fail. AlgoBot is provided <b>"as is"</b> with no warranty of uninterrupted or error-free operation.</li>
+      </ul>
+    </div>
+    <label class="disclaimer-check">
+      <input type="checkbox" id="disclaimer-accept-box"/>
+      <span>I have read and understood the risks above, and I accept full responsibility for my trading decisions. I also agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</span>
+    </label>
+    <button id="disclaimer-continue" class="btn-primary w100" disabled>Continue to Login</button>
+  </div>
+</div>
+
+<div class="auth-wrap" id="auth-wrap-content">
+  <div class="auth-box">
+    <div class="auth-logo">📈 AlgoBot</div>
+    <p class="auth-sub">1-Minute Options Scalping Bot</p>
+
+    <!-- Flash messages (email verified, errors from Google callback) -->
+    <div id="flash-msg" class="msg" style="display:none"></div>
+
+    <!-- Google Sign-In -->
+    <div id="google-btn-wrap">
+      <a href="/api/auth/google/login" id="google-btn" class="google-btn">
+        <svg width="18" height="18" viewBox="0 0 48 48" style="margin-right:8px">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          <path fill="none" d="M0 0h48v48H0z"/>
+        </svg>
+        Sign in with Google
+      </a>
+    </div>
+    <div id="google-unavailable" style="display:none;font-size:12px;color:var(--muted);text-align:center;margin-bottom:8px">
+      (Google Sign-In not configured)
+    </div>
+
+    <div class="auth-divider"><span>or</span></div>
+
+    <!-- Tabs -->
+    <div class="tab-row">
+      <button class="tab active" onclick="showTab('login')">Login</button>
+      <button class="tab" onclick="showTab('register')">Register</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="tab-login">
+      <input id="l-email" type="email" placeholder="Email" class="inp"/>
+      <input id="l-pass"  type="password" placeholder="Password" class="inp"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+      <button onclick="doLogin()" class="btn-primary w100">Login</button>
+      <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px">
+        <a href="/reset-password" style="color:var(--muted)">Forgot password?</a>
+        <a href="#" onclick="showResend()" style="color:var(--muted)">Resend verification</a>
+      </div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="tab-register" style="display:none">
+      <input id="r-name"  type="text"     placeholder="Full Name" class="inp" oninput="clearFieldError('r-name')"/>
+      <div class="field-error" id="err-r-name"></div>
+
+      <input id="r-email" type="email"    placeholder="Email"     class="inp" oninput="clearFieldError('r-email')"/>
+      <div class="field-error" id="err-r-email"></div>
+
+      <input id="r-mobile" type="tel" placeholder="Mobile Number (10 digits)" class="inp"
+             maxlength="10" inputmode="numeric" oninput="clearFieldError('r-mobile')"/>
+      <div class="field-error" id="err-r-mobile"></div>
+
+      <input id="r-pass"  type="password" placeholder="Password (min 8 chars)" class="inp"
+             oninput="clearFieldError('r-pass')"
+             onkeydown="if(event.key==='Enter')doRegister()"/>
+      <div class="field-error" id="err-r-pass"></div>
+
+      <button onclick="doRegister()" class="btn-primary w100" id="register-submit-btn">Create Account</button>
+    </div>
+
+    <!-- Resend verification (hidden by default) -->
+    <div id="resend-box" style="display:none;margin-top:10px">
+      <input id="resend-email" type="email" placeholder="Your email address" class="inp"/>
+      <button onclick="doResend()" class="btn-secondary w100">Resend Verification Email</button>
+    </div>
+
+    <div id="auth-msg" class="msg"></div>
+  </div>
+</div>
+
+<style>
+/* ============ DISCLAIMER MODAL ============ */
+.disclaimer-overlay{
+  position:fixed;inset:0;z-index:1000;
+  background:rgba(5,8,12,0.92);
+  backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.disclaimer-overlay.hidden{display:none;}
+.disclaimer-modal{
+  background:var(--card,#0f1620);
+  border:1px solid var(--border2,#263340);
+  border-radius:14px;
+  max-width:480px;width:100%;
+  max-height:88vh;
+  display:flex;flex-direction:column;
+  padding:28px 26px 24px;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,0.6);
+}
+.disclaimer-icon{font-size:30px;margin-bottom:8px;}
+.disclaimer-modal h2{
+  font-size:19px;font-weight:700;margin-bottom:14px;color:var(--text,#e8ecf1);
+}
+.disclaimer-body{
+  overflow-y:auto;flex:1;margin-bottom:16px;
+  font-size:13.5px;line-height:1.65;color:var(--muted2,#8693a1);
+  padding-right:4px;
+}
+.disclaimer-body p{margin-bottom:10px;}
+.disclaimer-body ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:9px;}
+.disclaimer-body li{color:var(--muted2,#8693a1);}
+.disclaimer-body b{color:var(--text,#e8ecf1);}
+.disclaimer-check{
+  display:flex;align-items:flex-start;gap:10px;
+  font-size:13px;color:var(--text,#e8ecf1);line-height:1.5;
+  margin-bottom:16px;cursor:pointer;user-select:none;
+}
+.disclaimer-check input{
+  margin-top:2px;width:17px;height:17px;flex-shrink:0;cursor:pointer;
+  accent-color:var(--green,#10b981);
+}
+.disclaimer-check a{color:var(--cyan,#3ec5ff);}
+.disclaimer-check a:hover{text-decoration:underline;}
+#disclaimer-continue:disabled{
+  opacity:0.4;cursor:not-allowed;transform:none !important;box-shadow:none !important;
+}
+/* Lock background scroll + block interaction while modal is open */
+body.disclaimer-locked{overflow:hidden;}
+#auth-wrap-content.disclaimer-pending{
+  filter:blur(4px);pointer-events:none;user-select:none;
+}
+@media(max-width:520px){
+  .disclaimer-modal{padding:22px 20px 20px;max-height:92vh;}
+  .disclaimer-modal h2{font-size:17px;}
+  .disclaimer-body{font-size:13px;}
+}
+
+.google-btn{display:flex;align-items:center;justify-content:center;
+  width:100%;padding:11px 16px;border-radius:8px;border:1px solid var(--border);
+  background:var(--card2,#1a2235);color:var(--text);text-decoration:none;
+  font-size:14px;font-weight:500;cursor:pointer;margin-bottom:12px;
+  transition:background .15s}
+.google-btn:hover{background:var(--border)}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:4px 0 12px;color:var(--muted);font-size:12px}
+.auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--border)}
+</style>
+
+<script>
+function showTab(t) {
+  document.getElementById('tab-login').style.display    = t==='login' ? '' : 'none';
+  document.getElementById('tab-register').style.display = t==='register' ? '' : 'none';
+  document.querySelectorAll('.tab').forEach((el,i) =>
+    el.classList.toggle('active', (i===0&&t==='login')||(i===1&&t==='register')));
+}
+
+function showResend() {
+  const box = document.getElementById('resend-box');
+  box.style.display = box.style.display === 'none' ? '' : 'none';
+  if (box.style.display !== 'none') {
+    const email = document.getElementById('l-email').value;
+    if (email) document.getElementById('resend-email').value = email;
+  }
+}
+
+function showMsg(text, type='error') {
+  const el = document.getElementById('auth-msg');
+  el.textContent = text;
+  el.className   = 'msg ' + type;
+}
+
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  if (!email || !pass) { showMsg('Email and password required'); return; }
+
+  const btn = document.querySelector('#tab-login .btn-primary');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Logging in…'; }
+  showMsg('');
+
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method:'POST', body: new URLSearchParams({ username: email, password: pass }),
+      headers:{'Content-Type':'application/x-www-form-urlencoded'}
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      _storeTokens(data);
+      window.location.href = '/dashboard';
+    } else {
+      const msg = data.detail || 'Login failed';
+      showMsg(msg);
+      if (msg.toLowerCase().includes('verify') || msg.toLowerCase().includes('verification')) {
+        document.getElementById('resend-box').style.display = '';
+        document.getElementById('resend-email').value = email;
+      }
+    }
+  } catch (e) {
+    showMsg('Network error — please check your connection and try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+// ── Shared inline-field-error helpers (used by register, and reusable
+// by any other form on this page) ────────────────────────────────
+function showFieldError(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  const err   = document.getElementById('err-' + fieldId);
+  if (input) input.classList.add('invalid');
+  if (err) { err.textContent = message; err.classList.add('show'); }
+}
+function clearFieldError(fieldId) {
+  const input = document.getElementById(fieldId);
+  const err   = document.getElementById('err-' + fieldId);
+  if (input) input.classList.remove('invalid');
+  if (err) { err.textContent = ''; err.classList.remove('show'); }
+}
+
+// Formats a FastAPI error response body into a human-readable string —
+// handles both a plain string `detail` (our own HTTPException(...) calls)
+// and Pydantic's structured 422 validation-error array.
+function formatApiError(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map(e => {
+      const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : 'field';
+      return `${field}: ${e.msg}`;
+    }).join('; ');
+  }
+  return fallback;
+}
+
+function validateRegisterForm() {
+  ['r-name', 'r-email', 'r-mobile', 'r-pass'].forEach(clearFieldError);
+  let valid = true;
+
+  const name = document.getElementById('r-name').value.trim();
+  if (!name) { showFieldError('r-name', 'Full name is required'); valid = false; }
+
+  const email = document.getElementById('r-email').value.trim();
+  if (!email) { showFieldError('r-email', 'Email is required'); valid = false; }
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('r-email', 'Enter a valid email address'); valid = false; }
+
+  const mobile = document.getElementById('r-mobile').value.trim();
+  if (!mobile) { showFieldError('r-mobile', 'Mobile number is required'); valid = false; }
+  else if (!/^[6-9]\d{9}$/.test(mobile)) { showFieldError('r-mobile', 'Enter a valid 10-digit mobile number'); valid = false; }
+
+  const pass = document.getElementById('r-pass').value;
+  if (!pass) { showFieldError('r-pass', 'Password is required'); valid = false; }
+  else if (pass.length < 8) { showFieldError('r-pass', 'Password must be at least 8 characters'); valid = false; }
+
+  return valid;
+}
+
+async function doRegister() {
+  if (!validateRegisterForm()) return;
+
+  const body = {
+    full_name:     document.getElementById('r-name').value.trim(),
+    email:         document.getElementById('r-email').value.trim(),
+    mobile_number: document.getElementById('r-mobile').value.trim(),
+    password:      document.getElementById('r-pass').value,
+  };
+
+  const btn = document.getElementById('register-submit-btn');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
+  showMsg('');
+
+  try {
+    const resp = await fetch('/api/auth/register', {
+      method:'POST', body: JSON.stringify(body),
+      headers:{'Content-Type':'application/json'}
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      _storeTokens(data);
+      showMsg(
+        '✅ Account created! Check your email for a verification link. '
+        + 'You can explore the app but the bot will be locked until you verify.',
+        'success');
+      showTab('login');
+      document.getElementById('l-email').value = body.email;
+    } else {
+      showMsg(formatApiError(data, 'Registration failed'));
+    }
+  } catch (e) {
+    showMsg('Network error — please check your connection and try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+async function doResend() {
+  const email = document.getElementById('resend-email').value.trim();
+  if (!email) { showMsg('Enter your email address'); return; }
+  const resp = await fetch('/api/auth/resend-verify', {
+    method:'POST', body: JSON.stringify({ email }),
+    headers:{'Content-Type':'application/json'}
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    showMsg('✅ Verification email sent — check your inbox (and spam folder)', 'success');
+  } else {
+    showMsg(data.detail || 'Could not resend');
+  }
+}
+
+function _storeTokens(data) {
+  localStorage.setItem('access_token',  data.access_token);
+  localStorage.setItem('refresh_token', data.refresh_token);
+}
+
+// ── Handle redirects ────────────────────────────────────────────
+function handleUrlParams() {
+  const p = new URLSearchParams(window.location.search);
+
+  // Google callback stores tokens in URL for the dashboard redirect,
+  // but the login page also might get ?verified=1 or ?error=...
+  if (p.get('verified') === '1') {
+    const flash = document.getElementById('flash-msg');
+    flash.textContent = '✅ Email verified! You can now log in.';
+    flash.className   = 'msg success';
+    flash.style.display = '';
+  }
+  if (p.get('error')) {
+    const flash = document.getElementById('flash-msg');
+    const msgs = {
+      'token_expired':  'Verification link has expired — please request a new one.',
+      'invalid_token':  'Invalid verification link — please request a new one.',
+      'missing_token':  'Verification link is incomplete.',
+    };
+    flash.textContent = msgs[p.get('error')] || decodeURIComponent(p.get('error'));
+    flash.className   = 'msg error';
+    flash.style.display = '';
+  }
+  // If already logged in, go straight to dashboard
+  if (localStorage.getItem('access_token') && !p.get('error') && !p.get('verified')) {
+    window.location.href = '/dashboard';
+    return;
+  }
+  window.history.replaceState({}, '', '/login');
+}
+
+// Check if Google Sign-In is configured
+async function checkGoogleAvailable() {
+  try {
+    const r = await fetch('/api/auth/google/status');
+    if (r.ok) {
+      const d = await r.json();
+      if (!d.enabled) {
+        document.getElementById('google-btn-wrap').style.display  = 'none';
+        document.getElementById('google-unavailable').style.display = '';
+      }
+    }
+  } catch (e) {}
+}
+
+// ── Risk disclaimer gate ──────────────────────────────────────────
+// Must be accepted before the login form is usable. Persisted in
+// localStorage so it doesn't reprompt on every visit from the same
+// browser — but DOES reprompt on a new device/browser or after the
+// user clears site data, which is intentional for a live-trading app.
+const DISCLAIMER_KEY = 'disclaimer_accepted_v1';
+
+function initDisclaimer() {
+  const overlay   = document.getElementById('disclaimer-overlay');
+  const content   = document.getElementById('auth-wrap-content');
+  const checkbox  = document.getElementById('disclaimer-accept-box');
+  const continueBtn = document.getElementById('disclaimer-continue');
+
+  const alreadyAccepted = localStorage.getItem(DISCLAIMER_KEY) === '1';
+
+  if (alreadyAccepted) {
+    overlay.classList.add('hidden');
+    content.classList.remove('disclaimer-pending');
+    document.body.classList.remove('disclaimer-locked');
+    return;
+  }
+
+  // Show modal, lock the form behind it
+  overlay.classList.remove('hidden');
+  content.classList.add('disclaimer-pending');
+  document.body.classList.add('disclaimer-locked');
+
+  // Stop the Terms/Privacy links (nested inside the <label>) from
+  // also toggling the checkbox when clicked.
+  document.querySelectorAll('.disclaimer-check a').forEach(a => {
+    a.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  checkbox.addEventListener('change', () => {
+    continueBtn.disabled = !checkbox.checked;
+  });
+
+  continueBtn.addEventListener('click', () => {
+    if (!checkbox.checked) return;
+    localStorage.setItem(DISCLAIMER_KEY, '1');
+    overlay.classList.add('hidden');
+    content.classList.remove('disclaimer-pending');
+    document.body.classList.remove('disclaimer-locked');
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  handleUrlParams();
+  checkGoogleAvailable();
+  initDisclaimer();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>{% block title %}AlgoBot{% endblock %}</title>
+<link rel="stylesheet" href="/static/css/style.css"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>"/>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+{% if show_nav != false %}
+<nav class="navbar">
+  <div class="nav-brand">📈 AlgoBot</div>
+  <div class="nav-links">
+    <a href="/dashboard"  id="nav-dashboard">Dashboard</a>
+    <a href="/trades"     id="nav-trades">Trades</a>
+    <a href="/billing"    id="nav-billing">Billing</a>
+    <a href="/settings"   id="nav-settings">Settings</a>
+    <span id="nav-admin-wrap" style="display:none">
+      <a href="/admin" id="nav-admin">Admin</a>
+      <a href="/admin/billing" id="nav-admin-billing">Billing Admin</a>
+      <a href="/admin/rewards" id="nav-admin-rewards">Rewards Admin</a>
+      <a href="/admin/rewards/settings" id="nav-admin-rewards-settings">Campaign Settings</a>
+    </span>
+    <button onclick="logout()" class="btn-logout">Logout</button>
+  </div>
+</nav>
+{% endif %}
+
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+<script>
+const API = '';
+
+function getToken()  { return localStorage.getItem('access_token'); }
+
+// Decodes the user_id (JWT "sub" claim) directly from the access
+// token — does NOT depend on syncUserInfo() having completed yet.
+// This avoids a race where a page's own DOMContentLoaded handler
+// (e.g. dashboard's connectWS()) runs before base.html's async
+// syncUserInfo() fetch resolves, which previously left
+// localStorage.user_id unset and silently broke the WebSocket
+// connection (and therefore live feed / voice alerts / push) on
+// fast page loads.
+function getUserId() {
+  const cached = localStorage.getItem('user_id');
+  if (cached) return cached;
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    return payload.sub || null;
+  } catch (e) {
+    return null;
+  }
+}
+function getRole()   { return localStorage.getItem('role'); }
+
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+  options.headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+    ...(options.headers || {})
+  };
+  try {
+    const resp = await fetch(API + url, options);
+    if (resp.status === 401) { logout(); return null; }
+    return resp;
+  } catch (e) {
+    console.error('API error:', e);
+    return null;
+  }
+}
+
+function logout() {
+  localStorage.clear();
+  window.location.href = '/login';
+}
+
+// Highlight active nav link
+function setActiveNav() {
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === path);
+  });
+}
+
+// Fetches the current user's role/id from the server and caches them
+// in localStorage (role/user_id are NOT returned by /login or
+// /register — only access_token/refresh_token are). Used to show/hide
+// the Admin nav link without re-fetching on every page.
+async function syncUserInfo() {
+  try {
+    const r = await apiFetch('/api/auth/me');
+    if (!r || !r.ok) return null;
+    const user = await r.json();
+    localStorage.setItem('role',    user.role);
+    localStorage.setItem('user_id', user.id);
+    localStorage.setItem('email',   user.email);
+    return user;
+  } catch (e) {
+    return null;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = getToken();
+  const path  = window.location.pathname;
+
+  // Pages that don't require authentication — never redirect from these,
+  // never call syncUserInfo() (which would trigger a 401 → logout() →
+  // redirect back to /login → infinite loop if token is expired/missing).
+  const publicPaths = ['/', '/login', '/reset-password', '/terms', '/privacy'];
+  if (publicPaths.includes(path)) {
+    setActiveNav();
+    return;
+  }
+
+  // Protected page — require a token
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
+
+  // Fetch real role from server (cheap, needed for Admin nav link).
+  // apiFetch returns null on 401 and calls logout() — that's safe here
+  // because we're on a protected page where logout/redirect is correct.
+  const user = await syncUserInfo();
+  if (user && user.role === 'admin') {
+    const aw = document.getElementById('nav-admin-wrap');
+    if (aw) aw.style.display = 'inline';
+  }
+  setActiveNav();
+});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

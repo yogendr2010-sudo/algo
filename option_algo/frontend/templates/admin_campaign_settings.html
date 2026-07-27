@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Campaign Settings — Admin — AlgoBot{% endblock %}
+{% block content %}
+<div class="page-wrap" style="max-width: 750px; margin: 0 auto;">
+  <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>⚙️ Upstox Campaign Settings</h1>
+    <a href="/admin/rewards" class="abtn" style="text-decoration: none;">📋 Reward Requests</a>
+  </div>
+
+  <div class="card">
+    <form id="settings-form" onsubmit="saveSettings(event)">
+      <div style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; font-weight: 600;">
+          <input type="checkbox" id="enable-campaign" style="width: 18px; height: 18px;">
+          <span>Enable Campaign (Turn on/off referral campaign on dashboard)</span>
+        </label>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Campaign Title <span style="color: var(--red);">*</span></label>
+        <input type="text" id="campaign-title" class="inp" required style="width: 100%;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Campaign Description <span style="color: var(--red);">*</span></label>
+        <textarea id="campaign-desc" class="inp" rows="4" required style="width: 100%; font-family: var(--font-sans);"></textarea>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Partner Referral URL <span style="color: var(--red);">*</span></label>
+        <input type="url" id="partner-url" class="inp" required placeholder="https://upstox.com/open-demat-account/?f=XXXX" style="width: 100%;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Button Text <span style="color: var(--red);">*</span></label>
+        <input type="text" id="button-text" class="inp" required style="width: 100%;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Banner Image URL</label>
+        <input type="text" id="banner-image" class="inp" placeholder="e.g. /static/images/banner.png" style="width: 100%;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label class="lbl">Terms & Conditions</label>
+        <textarea id="terms-conditions" class="inp" rows="4" placeholder="Enter terms & conditions..." style="width: 100%; font-family: var(--font-sans);"></textarea>
+      </div>
+
+      <div class="form-grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+        <div>
+          <label class="lbl">Campaign Start Date</label>
+          <input type="datetime-local" id="start-date" class="inp" style="width: 100%;">
+        </div>
+        <div>
+          <label class="lbl">Campaign End Date</label>
+          <input type="datetime-local" id="end-date" class="inp" style="width: 100%;">
+        </div>
+      </div>
+
+      <button type="submit" class="btn-primary" style="width: 100%;">Save Campaign Settings</button>
+    </form>
+    <div id="settings-msg" class="msg" style="margin-top: 16px; display: none;"></div>
+  </div>
+</div>
+
+<style>
+.lbl {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 13.5px;
+}
+.inp {
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color .2s;
+}
+.inp:focus {
+  border-color: var(--blue);
+}
+.btn-primary {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+.btn-primary:hover {
+  opacity: 0.9;
+}
+@media(max-width: 600px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+});
+
+async function loadSettings() {
+  const resp = await apiFetch('/api/campaign/admin/settings');
+  if (!resp || !resp.ok) {
+    document.getElementById('settings-msg').innerText = 'Failed to load campaign settings. Admin access required.';
+    document.getElementById('settings-msg').className = 'msg error';
+    document.getElementById('settings-msg').style.display = 'block';
+    document.getElementById('settings-form').style.opacity = '0.5';
+    document.getElementById('settings-form').querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
+    return;
+  }
+
+  const data = await resp.json();
+  document.getElementById('enable-campaign').checked = data.enable_campaign;
+  document.getElementById('campaign-title').value = data.campaign_title;
+  document.getElementById('campaign-desc').value = data.campaign_description;
+  document.getElementById('partner-url').value = data.partner_referral_url || '';
+  document.getElementById('button-text').value = data.button_text || 'Open Upstox Account';
+  document.getElementById('banner-image').value = data.banner_image || '';
+  document.getElementById('terms-conditions').value = data.terms_conditions || '';
+  
+  if (data.campaign_start_date) {
+    const start = new Date(data.campaign_start_date);
+    // Adjust timezone offset to get local time string
+    const offset = start.getTimezoneOffset() * 60000;
+    const local = new Date(start.getTime() - offset);
+    document.getElementById('start-date').value = local.toISOString().slice(0, 16);
+  } else {
+    document.getElementById('start-date').value = '';
+  }
+  
+  if (data.campaign_end_date) {
+    const end = new Date(data.campaign_end_date);
+    const offset = end.getTimezoneOffset() * 60000;
+    const local = new Date(end.getTime() - offset);
+    document.getElementById('end-date').value = local.toISOString().slice(0, 16);
+  } else {
+    document.getElementById('end-date').value = '';
+  }
+}
+
+async function saveSettings(e) {
+  e.preventDefault();
+  const msgDiv = document.getElementById('settings-msg');
+  msgDiv.style.display = 'none';
+
+  const enable = document.getElementById('enable-campaign').checked;
+  const title = document.getElementById('campaign-title').value;
+  const desc = document.getElementById('campaign-desc').value;
+  const partnerUrl = document.getElementById('partner-url').value;
+  const buttonText = document.getElementById('button-text').value;
+  const bannerImage = document.getElementById('banner-image').value;
+  const terms = document.getElementById('terms-conditions').value;
+  
+  const startVal = document.getElementById('start-date').value;
+  const endVal = document.getElementById('end-date').value;
+
+  const body = {
+    enable_campaign: enable,
+    campaign_title: title,
+    campaign_description: desc,
+    partner_referral_url: partnerUrl,
+    button_text: buttonText,
+    banner_image: bannerImage,
+    terms_conditions: terms,
+    campaign_start_date: startVal ? new Date(startVal).toISOString() : null,
+    campaign_end_date: endVal ? new Date(endVal).toISOString() : null
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.innerText = 'Saving...';
+
+  try {
+    const resp = await apiFetch('/api/campaign/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+
+    if (!resp) {
+      showMsg('Failed to save settings.', 'error');
+      return;
+    }
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      showMsg(data.detail || 'An error occurred.', 'error');
+    } else {
+      showMsg('Campaign settings saved successfully!', 'success');
+      await loadSettings();
+    }
+  } catch (err) {
+    console.error(err);
+    showMsg('An error occurred. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Save Campaign Settings';
+  }
+}
+
+function showMsg(text, type) {
+  const msgDiv = document.getElementById('settings-msg');
+  msgDiv.innerText = text;
+  msgDiv.className = 'msg ' + type;
+  msgDiv.style.display = 'block';
+}
+</script>
+{% endblock %}

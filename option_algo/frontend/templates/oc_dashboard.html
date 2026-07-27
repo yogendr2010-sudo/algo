@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Chain Dashboard — AlgoBot</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+/* ================================================================
+   OC DASHBOARD STYLES
+   ================================================================ */
+:root{--green:#00c87a;--red:#ff4d4d;--yellow:#f5a623;--blue:#4a9eff;--dark:#0f1923;--card:#1a2636;--border:#2a3a4a;--text:#e0e8f0;--muted:#6b8099;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--dark);color:var(--text);font-family:'Segoe UI',sans-serif;font-size:13px;}
+.navbar{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:20px;}
+.navbar a{color:var(--muted);text-decoration:none;font-size:13px;}
+.navbar a.active{color:var(--blue);}
+.navbar .brand{color:var(--text);font-weight:600;font-size:15px;margin-right:auto;}
+.page{padding:16px;max-width:1600px;margin:0 auto;}
+.grid-top{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;}
+.grid-mid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.card-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+
+/* Signal badge */
+.signal-badge{display:inline-block;padding:6px 14px;border-radius:20px;font-weight:700;font-size:13px;letter-spacing:.3px;}
+.sig-VERY_STRONG_BULLISH{background:#005c38;color:#00ff8a;}
+.sig-STRONG_BULLISH     {background:#004a2e;color:#00c87a;}
+.sig-BULLISH            {background:#003322;color:#4cd97b;}
+.sig-NEUTRAL            {background:#2a3a2a;color:#aaa;}
+.sig-BEARISH            {background:#330011;color:#ff8080;}
+.sig-STRONG_BEARISH     {background:#4a0011;color:#ff4d4d;}
+.sig-VERY_STRONG_BEARISH{background:#660011;color:#ff2020;}
+
+/* Stat rows */
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);}
+.stat-row:last-child{border-bottom:none;}
+.stat-label{color:var(--muted);font-size:12px;}
+.stat-val{font-weight:600;font-size:13px;}
+.up{color:var(--green);}
+.dn{color:var(--red);}
+.neu{color:var(--muted);}
+
+/* Weight meter */
+.weight-bar{height:8px;border-radius:4px;background:var(--border);margin-top:6px;overflow:hidden;display:flex;}
+.weight-vol{background:var(--blue);transition:width .4s;}
+.weight-oi {background:var(--yellow);transition:width .4s;}
+
+/* OC Table */
+.oc-table-wrap{overflow-x:auto;}
+table.oc-tbl{width:100%;border-collapse:collapse;font-size:12px;}
+table.oc-tbl th{background:#111e2d;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);font-weight:500;white-space:nowrap;}
+table.oc-tbl th.center{text-align:center;}
+table.oc-tbl td{text-align:right;padding:5px 8px;border-bottom:1px solid #151f2d;white-space:nowrap;}
+table.oc-tbl td.strike-col{text-align:center;font-weight:700;color:var(--text);background:#111e2d;}
+table.oc-tbl tr.atm-row td{background:#0f2030;border-top:1px solid var(--blue);border-bottom:1px solid var(--blue);}
+table.oc-tbl tr.atm-row td.strike-col{color:var(--blue);}
+.oi-bar-wrap{display:flex;align-items:center;gap:4px;}
+.oi-bar{height:6px;border-radius:3px;min-width:1px;}
+.ce-bar{background:var(--red);}
+.pe-bar{background:var(--green);}
+/* Flow tags */
+.flow-tag{font-size:10px;padding:1px 5px;border-radius:3px;margin-left:3px;}
+.top-ce{background:#3a1a1a;color:var(--red);}
+.top-pe{background:#1a3a1a;color:var(--green);}
+/* MTF */
+.mtf-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.mtf-box{text-align:center;padding:10px;border-radius:6px;border:1px solid var(--border);}
+.mtf-box .label{font-size:10px;color:var(--muted);margin-bottom:4px;}
+.mtf-box .val{font-weight:700;font-size:14px;}
+/* Reasons */
+.reason-pill{display:inline-block;background:#1a2a1a;color:#7fd97f;border:1px solid #2a4a2a;border-radius:12px;padding:2px 8px;margin:2px;font-size:11px;}
+.reason-pill.neg{background:#2a1a1a;color:#d97f7f;border-color:#4a2a2a;}
+/* Status bar */
+.status-bar{display:flex;align-items:center;gap:12px;padding:6px 0;font-size:11px;color:var(--muted);border-top:1px solid var(--border);margin-top:8px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;}
+.dot.live{background:var(--green);animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* Option chain table info row — desktop: single line, right-aligned-ish */
+#oc-table-info { display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* ================================================================
+   RESPONSIVE — tablet & phone
+   ================================================================ */
+@media (max-width: 1100px) {
+  .grid-top { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .page { padding: 10px; }
+  .navbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 8px 12px;
+  }
+  .navbar .brand { flex: 1 1 100%; text-align: center; order: -1; margin-right: 0; }
+  .navbar a { font-size: 12px; padding: 4px 6px; }
+  #oc-timestamp { flex: 1 1 100%; text-align: center; margin-left: 0 !important; }
+
+  .grid-top { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid-mid { grid-template-columns: 1fr; gap: 8px; }
+  .card { padding: 10px; }
+  .card-title { font-size: 10px; }
+
+  .mtf-grid { gap: 6px; }
+  .mtf-box { padding: 6px; }
+  .mtf-box .val { font-size: 12px; }
+
+  /* OC table info header stacks vertically and shrinks */
+  #oc-table-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-top: 6px;
+    font-size: 10px;
+  }
+  #oc-table-info span { white-space: nowrap; }
+
+  table.oc-tbl { font-size: 11px; }
+  table.oc-tbl th, table.oc-tbl td { padding: 4px 5px; }
+  .oi-bar-wrap { display: none; } /* hide mini bars on phones to save width */
+
+  .signal-badge { font-size: 11px; padding: 5px 10px; }
+  #oc-score { font-size: 18px !important; }
+}
+
+@media (max-width: 480px) {
+  .grid-top { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-label { font-size: 11px; }
+  .stat-val   { font-size: 12px; }
+  table.oc-tbl { font-size: 10px; }
+  table.oc-tbl th, table.oc-tbl td { padding: 3px 4px; }
+  .reason-pill { font-size: 10px; padding: 1px 6px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <span class="brand">⚡ AlgoBot</span>
+  <a href="/dashboard">Dashboard</a>
+  <a href="/trades">Trades</a>
+  <a href="/oc-dashboard" class="active">Option Chain</a>
+  <a href="/settings">Settings</a>
+  <span id="oc-timestamp" style="margin-left:auto;font-size:11px;color:var(--muted);">–</span>
+</nav>
+
+<div class="page">
+
+  <!-- TOP ROW: Signal + Score + Weight + Confidence -->
+  <div class="grid-top">
+
+    <!-- Signal -->
+    <div class="card">
+      <div class="card-title">OC Signal</div>
+      <div style="text-align:center;padding:8px 0;">
+        <div id="oc-signal-badge" class="signal-badge sig-NEUTRAL">–</div>
+        <div style="margin-top:8px;font-size:20px;font-weight:700;" id="oc-score">–</div>
+        <div style="font-size:11px;color:var(--muted);">Flow Score (−100 → +100)</div>
+      </div>
+    </div>
+
+    <!-- PCR + ATM PCR -->
+    <div class="card">
+      <div class="card-title">Put-Call Ratio</div>
+      <div class="stat-row"><span class="stat-label">Overall PCR</span><span class="stat-val" id="oc-pcr">–</span></div>
+      <div class="stat-row"><span class="stat-label">ATM PCR (±200)</span><span class="stat-val" id="oc-atm-pcr">–</span></div>
+      <div class="stat-row"><span class="stat-label">Dominant Side</span><span class="stat-val" id="oc-dominant">–</span></div>
+      <div class="stat-row"><span class="stat-label">ATM Dominance</span><span class="stat-val" id="oc-atm-dom">–</span></div>
+    </div>
+
+    <!-- Dynamic Weight -->
+    <div class="card">
+      <div class="card-title">Dynamic Weight (Vol vs OI)</div>
+      <div style="margin-bottom:6px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+          <span style="color:var(--blue)">Volume <span id="vw-pct">–</span></span>
+          <span style="color:var(--yellow)">OI <span id="ow-pct">–</span></span>
+        </div>
+        <div class="weight-bar">
+          <div class="weight-vol" id="vw-bar" style="width:30%"></div>
+          <div class="weight-oi"  id="ow-bar" style="width:70%"></div>
+        </div>
+      </div>
+      <div class="stat-row"><span class="stat-label">Vol near spot</span><span class="stat-val" id="vol-near">–</span></div>
+      <div class="stat-row"><span class="stat-label">OI near spot</span><span class="stat-val" id="oi-near">–</span></div>
+      <div class="stat-row"><span class="stat-label">Same strike</span><span class="stat-val" id="both-same">–</span></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;" id="weight-reason">–</div>
+    </div>
+
+    <!-- Max Pain + S/R -->
+    <div class="card">
+      <div class="card-title">Max Pain / Support / Resistance</div>
+      <div class="stat-row"><span class="stat-label">Max Pain</span><span class="stat-val" id="oc-maxpain">–</span></div>
+      <div class="stat-row"><span class="stat-label">Max Pain Shift</span><span class="stat-val" id="oc-mp-shift">–</span></div>
+      <div class="stat-row"><span class="stat-label">Max Pain Dist %</span><span class="stat-val" id="oc-mp-dist">–</span></div>
+      <div class="stat-row"><span class="stat-label">Support (PE wall)</span><span class="stat-val up" id="oc-support">–</span></div>
+      <div class="stat-row"><span class="stat-label">Resistance (CE wall)</span><span class="stat-val dn" id="oc-resistance">–</span></div>
+    </div>
+
+  </div><!-- /grid-top -->
+
+  <!-- MID ROW -->
+  <div class="grid-mid">
+
+    <!-- MTF Flow -->
+    <div class="card">
+      <div class="card-title">Multi-Timeframe Flow</div>
+      <div class="mtf-grid" style="margin-bottom:12px;">
+        <div class="mtf-box"><div class="label">5 Min</div><div class="val" id="mtf-5m">–</div></div>
+        <div class="mtf-box"><div class="label">15 Min</div><div class="val" id="mtf-15m">–</div></div>
+        <div class="mtf-box"><div class="label">30 Min</div><div class="val" id="mtf-30m">–</div></div>
+      </div>
+      <div class="stat-row"><span class="stat-label">Institutional</span><span class="stat-val" id="oc-inst">–</span></div>
+      <div class="stat-row"><span class="stat-label">Acceleration</span><span class="stat-val" id="oc-accel">–</span></div>
+      <div class="stat-row"><span class="stat-label">COG Trend</span><span class="stat-val" id="oc-cog-trend">–</span></div>
+      <div class="stat-row"><span class="stat-label">Rotation Signal</span><span class="stat-val" id="oc-rot-sig">–</span></div>
+      <div class="stat-row"><span class="stat-label">Wall Dominance</span><span class="stat-val" id="oc-wall">–</span></div>
+      <div class="stat-row"><span class="stat-label">Trend Quality</span><span class="stat-val" id="oc-tq">–</span></div>
+      <div class="stat-row"><span class="stat-label">Confidence</span><span class="stat-val" id="oc-conf">–</span></div>
+      <div class="stat-row"><span class="stat-label">Institutional Rating</span><span class="stat-val" id="oc-ir">–</span></div>
+    </div>
+
+    <!-- OI + Volume scores -->
+    <div class="card">
+      <div class="card-title">OI vs Volume Scores</div>
+      <div class="stat-row"><span class="stat-label">OI Score (raw)</span><span class="stat-val" id="oi-score-raw">–</span></div>
+      <div class="stat-row"><span class="stat-label">Volume Score (raw)</span><span class="stat-val" id="vol-score-raw">–</span></div>
+      <div class="stat-row"><span class="stat-label">Combined (weighted)</span><span class="stat-val" id="combined-score">–</span></div>
+      <div style="margin:10px 0 4px;font-size:11px;color:var(--muted);">OI Momentum</div>
+      <div class="stat-row"><span class="stat-label">CE OI Add</span><span class="stat-val dn" id="ce-oi-add">–</span></div>
+      <div class="stat-row"><span class="stat-label">PE OI Add</span><span class="stat-val up" id="pe-oi-add">–</span></div>
+      <div class="stat-row"><span class="stat-label">OI Leader</span><span class="stat-val" id="oi-leader">–</span></div>
+      <div style="margin:10px 0 4px;font-size:11px;color:var(--muted);">Volume Momentum</div>
+      <div class="stat-row"><span class="stat-label">CE Vol Momentum</span><span class="stat-val dn" id="ce-vol-mom">–</span></div>
+      <div class="stat-row"><span class="stat-label">PE Vol Momentum</span><span class="stat-val up" id="pe-vol-mom">–</span></div>
+      <div class="stat-row"><span class="stat-label">Vol Leader</span><span class="stat-val" id="vol-leader">–</span></div>
+      <div style="margin:10px 0 4px;font-size:11px;color:var(--muted);">Positions</div>
+      <div class="stat-row"><span class="stat-label">Long Buildup</span><span class="stat-val up" id="pos-lb">–</span></div>
+      <div class="stat-row"><span class="stat-label">Short Buildup</span><span class="stat-val dn" id="pos-sb">–</span></div>
+      <div class="stat-row"><span class="stat-label">Short Covering</span><span class="stat-val up" id="pos-sc">–</span></div>
+      <div class="stat-row"><span class="stat-label">Long Unwinding</span><span class="stat-val dn" id="pos-lu">–</span></div>
+    </div>
+
+  </div><!-- /grid-mid -->
+
+  <!-- Reasons -->
+  <div class="card" style="margin-bottom:12px;">
+    <div class="card-title">Score Reasons</div>
+    <div id="oc-reasons">–</div>
+  </div>
+
+  <!-- OC Table -->
+  <div class="card">
+    <div class="card-title">Option Chain</div>
+    <div id="oc-table-info" style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+      <span>Spot: <span id="oc-spot">–</span></span>
+      <span>CE Max Vol: <span id="ce-vol-top">–</span></span>
+      <span>PE Max Vol: <span id="pe-vol-top">–</span></span>
+      <span>CE Max OI: <span id="ce-oi-top">–</span></span>
+      <span>PE Max OI: <span id="pe-oi-top">–</span></span>
+    </div>
+    <div class="oc-table-wrap">
+      <table class="oc-tbl" id="oc-table">
+        <thead>
+          <tr>
+            <th>CE OI</th><th>CE Vol</th><th>CE LTP</th>
+            <th class="center">STRIKE</th>
+            <th>PE LTP</th><th>PE Vol</th><th>PE OI</th>
+          </tr>
+        </thead>
+        <tbody id="oc-tbody"></tbody>
+      </table>
+    </div>
+    <div class="status-bar">
+      <span class="dot live" id="oc-dot"></span>
+      <span id="oc-status-txt">Connecting…</span>
+      <span style="margin-left:auto;">Refresh every 30s</span>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+const token = localStorage.getItem("access_token");
+if (!token) { location.href = "/"; }
+
+const hdr = { "Authorization": "Bearer " + token };
+
+let lastDf = null;
+
+function fmt(n, dec=0) {
+  if (n == null || isNaN(n)) return "–";
+  return Number(n).toLocaleString("en-IN", {minimumFractionDigits: dec, maximumFractionDigits: dec});
+}
+function color(v, pos="#00c87a", neg="#ff4d4d") {
+  return `color:${v > 0 ? pos : v < 0 ? neg : "#6b8099"}`;
+}
+function trendColor(t) {
+  if (t === "BULLISH" || t === "STRONG_BULLISH" || t === "UP" || t === "STRONG_UP") return "var(--green)";
+  if (t === "BEARISH" || t === "STRONG_BEARISH" || t === "DOWN" || t === "STRONG_DOWN") return "var(--red)";
+  return "var(--muted)";
+}
+
+function update(a, df) {
+  // Signal
+  const sig = a.signal || "NEUTRAL";
+  const el  = document.getElementById("oc-signal-badge");
+  el.textContent  = sig.replace(/_/g," ");
+  el.className    = "signal-badge sig-" + sig;
+  const scoreEl   = document.getElementById("oc-score");
+  scoreEl.textContent = (a.flow_score > 0 ? "+" : "") + a.flow_score;
+  scoreEl.style.color = a.flow_score > 0 ? "var(--green)" : a.flow_score < 0 ? "var(--red)" : "var(--muted)";
+
+  // PCR
+  document.getElementById("oc-pcr").textContent     = fmt(a.pcr, 3);
+  document.getElementById("oc-atm-pcr").textContent = fmt(a.atm_pcr, 3);
+  document.getElementById("oc-dominant").textContent = a.dominant_side || "–";
+  document.getElementById("oc-atm-dom").textContent  = (a.atm_dominance||"–").replace(/_/g," ");
+
+  // Weight
+  const vw = Math.round((a.volume_weight||0.3)*100);
+  const ow = Math.round((a.oi_weight||0.7)*100);
+  document.getElementById("vw-pct").textContent = vw + "%";
+  document.getElementById("ow-pct").textContent = ow + "%";
+  document.getElementById("vw-bar").style.width = vw + "%";
+  document.getElementById("ow-bar").style.width = ow + "%";
+  document.getElementById("vol-near").textContent   = a.vol_near_spot  ? "✅ Yes" : "No";
+  document.getElementById("oi-near").textContent    = a.oi_near_spot   ? "✅ Yes" : "No";
+  document.getElementById("both-same").textContent  = a.both_same_strike ? "✅ Yes" : "No";
+  document.getElementById("weight-reason").textContent = a.weight_reason || "";
+
+  // Max pain
+  document.getElementById("oc-maxpain").textContent  = fmt(a.max_pain);
+  document.getElementById("oc-mp-shift").textContent = fmt(a.max_pain_shift);
+  document.getElementById("oc-mp-dist").textContent  = fmt(a.max_pain_distance, 2) + "%";
+  document.getElementById("oc-support").textContent    = fmt(a.support);
+  document.getElementById("oc-resistance").textContent = fmt(a.resistance);
+
+  // MTF
+  ["5m","15m","30m"].forEach(tf => {
+    const key = "trend_"+tf;
+    const el  = document.getElementById("mtf-"+tf);
+    const val = a[key] || "UNKNOWN";
+    el.textContent  = val;
+    el.style.color  = trendColor(val);
+  });
+  document.getElementById("oc-inst").textContent     = (a.institutional_confirmation||"–").replace(/_/g," ");
+  document.getElementById("oc-accel").textContent    = fmt(a.flow_acceleration, 1);
+  document.getElementById("oc-cog-trend").textContent = a.cog_trend || "–";
+  document.getElementById("oc-rot-sig").textContent   = a.rotation_signal || "–";
+  document.getElementById("oc-wall").textContent      = (a.wall_dominance||"–").replace(/_/g," ");
+  document.getElementById("oc-tq").textContent        = a.trend_quality || "–";
+  document.getElementById("oc-conf").textContent      = fmt(a.confidence) + "%";
+  document.getElementById("oc-ir").textContent        = a.institutional_rating || "–";
+
+  // OI + Vol scores
+  const oiRaw  = document.getElementById("oi-score-raw");
+  const volRaw = document.getElementById("vol-score-raw");
+  const comb   = document.getElementById("combined-score");
+  oiRaw.textContent  = a.oi_score_raw  != null ? (a.oi_score_raw  >= 0 ? "+" : "") + a.oi_score_raw  : "–";
+  volRaw.textContent = a.vol_score_raw != null ? (a.vol_score_raw >= 0 ? "+" : "") + a.vol_score_raw : "–";
+  comb.textContent   = a.combined_oi_vol_score != null ? (a.combined_oi_vol_score >= 0 ? "+" : "") + a.combined_oi_vol_score : "–";
+  oiRaw.style.cssText  = color(a.oi_score_raw);
+  volRaw.style.cssText = color(a.vol_score_raw);
+  comb.style.cssText   = color(a.combined_oi_vol_score);
+
+  // OI momentum
+  const oc = a.oi_change || {};
+  document.getElementById("ce-oi-add").textContent = fmt(oc.ce_oi_add);
+  document.getElementById("pe-oi-add").textContent = fmt(oc.pe_oi_add);
+  document.getElementById("oi-leader").textContent = (a.oi_momentum||{}).leader || "–";
+
+  // Vol momentum
+  const vm = a.vol_momentum || {};
+  document.getElementById("ce-vol-mom").textContent = fmt(vm.ce_vol_momentum);
+  document.getElementById("pe-vol-mom").textContent = fmt(vm.pe_vol_momentum);
+  document.getElementById("vol-leader").textContent = vm.leader || "–";
+
+  // Positions
+  document.getElementById("pos-lb").textContent = fmt(a.long_buildup);
+  document.getElementById("pos-sb").textContent = fmt(a.short_buildup);
+  document.getElementById("pos-sc").textContent = fmt(a.short_covering);
+  document.getElementById("pos-lu").textContent = fmt(a.long_unwinding);
+
+  // Reasons
+  const reasons = a.reasons || [];
+  document.getElementById("oc-reasons").innerHTML = reasons.length
+    ? reasons.map(r => `<span class="reason-pill ${r.toLowerCase().includes("bear")||r.toLowerCase().includes("short")||r.toLowerCase().includes("put")?"neg":""}">${r}</span>`).join("")
+    : "<span style='color:var(--muted)'>No reasons</span>";
+
+  // Spot + top strikes
+  document.getElementById("oc-spot").textContent    = fmt(a.underlying_ltp);
+  document.getElementById("ce-vol-top").textContent = fmt(a.ce_vol_top_strike);
+  document.getElementById("pe-vol-top").textContent = fmt(a.pe_vol_top_strike);
+  document.getElementById("ce-oi-top").textContent  = fmt(a.ce_oi_top_strike);
+  document.getElementById("pe-oi-top").textContent  = fmt(a.pe_oi_top_strike);
+
+  document.getElementById("oc-timestamp").textContent = a.timestamp || "";
+}
+
+function buildTable(df, a) {
+  if (!df || !df.length) return;
+  const spot       = a ? a.underlying_ltp : 0;
+  const topCeFlows = new Set((a?.top_ce_flows||[]).map(x=>x.strike));
+  const topPeFlows = new Set((a?.top_pe_flows||[]).map(x=>x.strike));
+  const maxCeOI    = Math.max(...df.map(r=>r.ce_oi||0), 1);
+  const maxPeOI    = Math.max(...df.map(r=>r.pe_oi||0), 1);
+
+  // Show ATM ±10 strikes
+  const sorted = [...df].sort((a,b)=>a.strike-b.strike);
+  const atmIdx = sorted.reduce((bi,r,i)=>Math.abs(r.strike-spot)<Math.abs(sorted[bi].strike-spot)?i:bi, 0);
+  const sliced = sorted.slice(Math.max(0,atmIdx-10), atmIdx+11);
+
+  const tbody = document.getElementById("oc-tbody");
+  tbody.innerHTML = sliced.map(r => {
+    const isATM  = Math.abs(r.strike - spot) < 26;
+    const cePct  = Math.round(r.ce_oi/maxCeOI*80);
+    const pePct  = Math.round(r.pe_oi/maxPeOI*80);
+    const ceTag  = topCeFlows.has(r.strike) ? '<span class="flow-tag top-ce">CE TOP</span>' : "";
+    const peTag  = topPeFlows.has(r.strike) ? '<span class="flow-tag top-pe">PE TOP</span>' : "";
+    return `<tr class="${isATM?"atm-row":""}">
+      <td>${fmt(r.ce_oi)} <div class="oi-bar-wrap"><div class="oi-bar ce-bar" style="width:${cePct}px"></div></div></td>
+      <td>${fmt(r.ce_volume)}${ceTag}</td>
+      <td style="color:var(--red)">${fmt(r.ce_ltp,2)}</td>
+      <td class="strike-col">${fmt(r.strike)}</td>
+      <td style="color:var(--green)">${fmt(r.pe_ltp,2)}</td>
+      <td>${fmt(r.pe_volume)}${peTag}</td>
+      <td>${fmt(r.pe_oi)} <div class="oi-bar-wrap"><div class="oi-bar pe-bar" style="width:${pePct}px"></div></div></td>
+    </tr>`;
+  }).join("");
+}
+
+async function fetchOC() {
+  try {
+    const r = await fetch("/api/oc/analysis", {headers: hdr});
+    if (!r.ok) {
+      document.getElementById("oc-status-txt").textContent = "No data (bot not running or OC not initialised)";
+      return;
+    }
+    const data = await r.json();
+    if (data.analysis) {
+      update(data.analysis, lastDf);
+    }
+    if (data.chain_df) {
+      lastDf = data.chain_df;
+      buildTable(lastDf, data.analysis);
+    }
+    document.getElementById("oc-status-txt").textContent = "Live — last updated " + new Date().toLocaleTimeString();
+  } catch(e) {
+    document.getElementById("oc-status-txt").textContent = "Error: " + e.message;
+  }
+}
+
+fetchOC();
+setInterval(fetchOC, 15000);
+</script>
+</body>
+</html>

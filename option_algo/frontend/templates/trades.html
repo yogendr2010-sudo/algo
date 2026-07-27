@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}Trade History — AlgoBot{% endblock %}
+{% block content %}
+<h1>Trade History</h1>
+
+<!-- Summary Cards -->
+<div class="summary-row">
+  <div class="sum-card">
+    <div class="sum-val" id="s-total">—</div>
+    <div class="sum-lbl">Total Trades</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val green" id="s-wins">—</div>
+    <div class="sum-lbl">Winners</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val red" id="s-losses">—</div>
+    <div class="sum-lbl">Losers</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val" id="s-wr">—</div>
+    <div class="sum-lbl">Win Rate</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val" id="s-pnl">—</div>
+    <div class="sum-lbl">Total P&L (₹)</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val" id="s-avg">—</div>
+    <div class="sum-lbl">Avg P&L / Trade</div>
+  </div>
+</div>
+
+<!-- Date Range Filter -->
+<div class="card" style="padding:14px 20px">
+  <div class="date-filter-bar">
+    <div class="date-filter-group">
+      <label class="date-label">From Date</label>
+      <input type="date" id="f-from-date" class="inp date-inp" />
+    </div>
+    <div class="date-filter-group">
+      <label class="date-label">To Date</label>
+      <input type="date" id="f-to-date" class="inp date-inp" />
+    </div>
+    <button onclick="applyDateFilter()" id="btn-apply-filter" class="btn-filter">Apply Filter</button>
+    <button onclick="resetDateFilter()" class="btn-filter-reset">Reset</button>
+    <div id="date-range-indicator" class="date-range-indicator" style="display:none"></div>
+    <div id="date-filter-error" class="date-filter-error" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card" style="padding:14px 20px">
+  <div class="filter-row">
+    <select id="f-status" class="inp filter-inp" onchange="page=0; loadTrades()">
+      <option value="">All Status</option>
+      <option value="TARGET">Target Hit</option>
+      <option value="SL">Stop Loss</option>
+      <option value="MANUAL_SQUAREOFF">Manual Exit</option>
+    </select>
+    <select id="f-strategy" class="inp filter-inp" onchange="page=0; loadTrades()">
+      <option value="">All Strategies</option>
+      <option value="pullback_1m">Pullback</option>
+      <option value="sweep_1m">Liquidity Sweep</option>
+      <option value="breakout_1m">Breakout</option>
+    </select>
+    <select id="f-mode" class="inp filter-inp" onchange="page=0; loadTrades()">
+      <option value="">All Modes</option>
+      <option value="paper">Paper</option>
+      <option value="live">Live</option>
+    </select>
+    <button onclick="exportCSV()" class="btn-export">⬇ Export CSV</button>
+  </div>
+</div>
+
+<!-- Trades Table -->
+<div class="card">
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Date/Time</th>
+        <th>Symbol</th>
+        <th>Type</th>
+        <th>Entry</th>
+        <th>Exit</th>
+        <th>P&L</th>
+        <th>Status</th>
+        <th>Strategy</th>
+        <th>Mode</th>
+      </tr>
+    </thead>
+    <tbody id="trades-body">
+      <tr><td colspan="9" class="muted center" style="padding:20px">Loading...</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="pagination">
+    <button onclick="prevPage()" id="btn-prev" disabled>← Prev</button>
+    <span id="page-info">Page 1</span>
+    <button onclick="nextPage()" id="btn-next">Next →</button>
+  </div>
+</div>
+
+<style>
+.summary-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:700px){.summary-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:420px){.summary-row{grid-template-columns:repeat(2,1fr)}}
+.sum-card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:14px;text-align:center}
+.sum-val{font-size:24px;font-weight:700;margin-bottom:4px}
+.sum-lbl{font-size:11px;color:var(--muted)}
+.filter-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filter-inp{width:auto;flex:1;min-width:130px;margin-bottom:0}
+.btn-export{padding:10px 16px;background:rgba(16,185,129,.12);color:var(--green);
+  border:1px solid rgba(16,185,129,.4);border-radius:8px;font-size:13px;
+  cursor:pointer;white-space:nowrap}
+.btn-export:hover{background:rgba(16,185,129,.22)}
+
+/* Date filter bar */
+.date-filter-bar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.date-filter-group{display:flex;flex-direction:column;gap:4px}
+.date-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.date-inp{width:180px;margin-bottom:0;padding:9px 12px;font-size:13px}
+@media(max-width:600px){.date-inp{width:100%}}
+.date-filter-bar .btn-filter{padding:9px 18px;background:var(--blue);color:#fff;border:none;
+  border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.date-filter-bar .btn-filter:hover{opacity:.88}
+.date-filter-bar .btn-filter:disabled{opacity:.4;cursor:not-allowed}
+.date-filter-bar .btn-filter-reset{padding:9px 18px;background:transparent;color:var(--muted);
+  border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;transition:all .2s}
+.date-filter-bar .btn-filter-reset:hover{color:var(--text);border-color:var(--muted)}
+.date-range-indicator{font-size:13px;color:var(--green);font-weight:600;margin-left:4px;padding:6px 10px;
+  background:rgba(16,185,129,.08);border-radius:6px;white-space:nowrap}
+.date-filter-error{font-size:12px;color:var(--red);width:100%;margin-top:4px}
+</style>
+
+<script>
+let page = 0;
+const limit = 25;
+let allTrades = [];
+let filterFromDate = '';
+let filterToDate = '';
+let isFilterActive = false;
+let isLoading = false;
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+}
+
+function buildQueryParams() {
+  let params = `limit=${limit}&offset=${page * limit}`;
+  const status   = document.getElementById('f-status').value;
+  const strategy = document.getElementById('f-strategy').value;
+  const mode     = document.getElementById('f-mode').value;
+  if (status)   params += `&status=${status}`;
+  if (strategy) params += `&strategy=${strategy}`;
+  if (mode)     params += `&mode=${mode}`;
+  if (filterFromDate) params += `&from_date=${filterFromDate}`;
+  if (filterToDate)   params += `&to_date=${filterToDate}`;
+  return params;
+}
+
+function updateDateIndicator() {
+  const indicator = document.getElementById('date-range-indicator');
+  const errorEl   = document.getElementById('date-filter-error');
+  if (isFilterActive && filterFromDate && filterToDate) {
+    indicator.textContent = `Showing: ${formatDateDisplay(filterFromDate)} → ${formatDateDisplay(filterToDate)}`;
+    indicator.style.display = 'inline-block';
+    errorEl.style.display = 'none';
+  } else if (isFilterActive && filterFromDate && !filterToDate) {
+    indicator.textContent = `Showing: from ${formatDateDisplay(filterFromDate)}`;
+    indicator.style.display = 'inline-block';
+    errorEl.style.display = 'none';
+  } else if (isFilterActive && !filterFromDate && filterToDate) {
+    indicator.textContent = `Showing: until ${formatDateDisplay(filterToDate)}`;
+    indicator.style.display = 'inline-block';
+    errorEl.style.display = 'none';
+  } else {
+    indicator.style.display = 'none';
+    errorEl.style.display = 'none';
+  }
+}
+
+function validateDates(fromDate, toDate) {
+  const errorEl = document.getElementById('date-filter-error');
+  if (!fromDate && !toDate) return true;
+  if (fromDate && toDate) {
+    if (fromDate > toDate) {
+      errorEl.textContent = 'From Date cannot be later than To Date.';
+      errorEl.style.display = 'block';
+      return false;
+    }
+  }
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (fromDate) {
+    const fd = new Date(fromDate + 'T00:00:00');
+    if (fd > today) {
+      errorEl.textContent = 'From Date cannot be in the future.';
+      errorEl.style.display = 'block';
+      return false;
+    }
+  }
+  if (toDate) {
+    const td = new Date(toDate + 'T00:00:00');
+    if (td > today) {
+      errorEl.textContent = 'To Date cannot be in the future.';
+      errorEl.style.display = 'block';
+      return false;
+    }
+  }
+  errorEl.style.display = 'none';
+  return true;
+}
+
+function applyDateFilter() {
+  if (isLoading) return;
+  const fromDate = document.getElementById('f-from-date').value;
+  const toDate   = document.getElementById('f-to-date').value;
+  if (!fromDate && !toDate) {
+    resetDateFilter();
+    return;
+  }
+  if (!validateDates(fromDate, toDate)) return;
+  filterFromDate = fromDate;
+  filterToDate   = toDate;
+  isFilterActive = true;
+  page = 0;
+  updateDateIndicator();
+  loadTrades();
+  loadSummary();
+}
+
+function resetDateFilter() {
+  document.getElementById('f-from-date').value = '';
+  document.getElementById('f-to-date').value = '';
+  document.getElementById('date-filter-error').style.display = 'none';
+  filterFromDate = '';
+  filterToDate = '';
+  isFilterActive = false;
+  page = 0;
+  document.getElementById('date-range-indicator').style.display = 'none';
+  loadTrades();
+  loadSummary();
+}
+
+async function loadSummary() {
+  let url = '/api/trades/summary?';
+  if (filterFromDate) url += `&from_date=${filterFromDate}`;
+  if (filterToDate)   url += `&to_date=${filterToDate}`;
+  const r = await apiFetch(url);
+  if (!r || !r.ok) return;
+  const s = await r.json();
+  const losses = s.total - s.winners;
+  const avg    = s.total > 0 ? (s.total_pnl / s.total).toFixed(0) : 0;
+  document.getElementById('s-total').textContent  = s.total;
+  document.getElementById('s-wins').textContent   = s.winners;
+  document.getElementById('s-losses').textContent = losses;
+  document.getElementById('s-wr').textContent     = s.win_rate + '%';
+  const pnlEl = document.getElementById('s-pnl');
+  pnlEl.textContent = (s.total_pnl >= 0 ? '+' : '') + s.total_pnl;
+  pnlEl.className   = 'sum-val ' + (s.total_pnl >= 0 ? 'green' : 'red');
+  const avgEl = document.getElementById('s-avg');
+  avgEl.textContent = (avg >= 0 ? '+' : '') + avg;
+  avgEl.className   = 'sum-val ' + (avg >= 0 ? 'green' : 'red');
+}
+
+async function loadTrades() {
+  if (isLoading) return;
+  isLoading = true;
+  const btnApply = document.getElementById('btn-apply-filter');
+  if (btnApply) btnApply.disabled = true;
+  const body = document.getElementById('trades-body');
+  body.innerHTML = '<tr><td colspan="9" class="muted center" style="padding:20px">Loading...</td></tr>';
+  const url = '/api/trades/?' + buildQueryParams();
+  const r = await apiFetch(url);
+  if (!r || !r.ok) { isLoading = false; if (btnApply) btnApply.disabled = false; return; }
+  const trades = await r.json();
+  allTrades = trades;
+  if (!trades.length) {
+    if (isFilterActive) {
+      body.innerHTML = '<tr><td colspan="9" class="muted center" style="padding:20px">No trades were found for the selected date range.</td></tr>';
+    } else {
+      body.innerHTML = '<tr><td colspan="9" class="muted center" style="padding:20px">No trades found</td></tr>';
+    }
+  } else {
+    body.innerHTML = trades.map(t => {
+      const pnl     = t.pnl != null ? t.pnl : null;
+      const pnlStr  = pnl != null ? (pnl >= 0 ? '+' : '') + '₹' + pnl : '—';
+      const pnlCls  = pnl >= 0 ? 'green' : 'red';
+      const modeTag = (t.mode === 'paper') ? '📄' : '💰';
+      const statusMap = {
+        'TARGET': '<span class="badge badge-target">TARGET</span>',
+        'SL':     '<span class="badge badge-sl">SL HIT</span>',
+        'MANUAL_SQUAREOFF': '<span class="badge badge-manual">MANUAL</span>',
+      };
+      const strat = { pullback_1m:'Pullback', sweep_1m:'Sweep', breakout_1m:'Breakout' }[t.strategy] || t.strategy;
+      return `<tr>
+        <td style="white-space:nowrap;color:var(--muted)">${(() => {
+          if (!t.entry_ts) return '—';
+          try {
+            const clean = t.entry_ts.replace(/\.\d+Z$/, 'Z').replace(' ', 'T');
+            const d = new Date(clean.endsWith('Z') ? clean : clean + 'Z');
+            if (isNaN(d.getTime())) return t.entry_ts.slice(0,16).replace('T',' ');
+            return d.toLocaleString('en-IN', {
+              day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit',
+              hour12:false, timeZone:'Asia/Kolkata'
+            });
+          } catch(e) { return t.entry_ts.slice(0,16).replace('T',' '); }
+        })()}</td>
+        <td><b>${t.trading_symbol || '—'}</b></td>
+        <td>${t.opt_type || ''} ${t.strike || ''}</td>
+        <td>₹${t.entry_price}</td>
+        <td>${t.exit_price ? '₹'+t.exit_price : '—'}</td>
+        <td class="${pnlCls}">${pnlStr}</td>
+        <td>${statusMap[t.status] || t.status}</td>
+        <td>${strat}</td>
+        <td>${modeTag}</td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('btn-prev').disabled = page === 0;
+  document.getElementById('btn-next').disabled = trades.length < limit;
+  document.getElementById('page-info').textContent = `Page ${page + 1}`;
+  isLoading = false;
+  if (btnApply) btnApply.disabled = false;
+}
+
+function prevPage() { if (page > 0) { page--; loadTrades(); } }
+function nextPage() { page++; loadTrades(); }
+
+function exportCSV() {
+  if (!allTrades.length) return;
+  const cols = ['entry_ts','trading_symbol','opt_type','strike','entry_price','exit_price','pnl','status','strategy','mode'];
+  const rows = [cols.join(','), ...allTrades.map(t =>
+    cols.map(c => JSON.stringify(t[c] ?? '')).join(',')
+  )];
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `trades_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadSummary(); loadTrades(); });
+</script>
+{% endblock %}
+

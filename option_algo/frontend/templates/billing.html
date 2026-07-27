@@ -1,0 +1,791 @@
+{% extends "base.html" %}
+{% block title %}Billing — AlgoBot{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.dataTables.min.css">
+<style>
+.billing-shell{
+  --bg:#0a0f1e; --card:#111827; --border:#1f2937; --text:#e2e8f0; --muted:#94a3b8;
+  --accent:#10b981; --accent2:#3b82f6; --danger:#ef4444; --shadow:0 4px 20px rgba(0,0,0,.35);
+  margin:-20px -24px; min-height:100vh; background:var(--bg); color:var(--text);
+}
+.billing-shell[data-theme="light"]{
+  --bg:#f1f5f9; --card:#ffffff; --border:#e2e8f0; --text:#0f172a; --muted:#64748b;
+  --shadow:0 4px 16px rgba(15,23,42,.08);
+}
+.billing-shell *{box-sizing:border-box}
+.billing-topbar{position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:14px;
+  padding:14px 26px; background:var(--card); border-bottom:1px solid var(--border)}
+.billing-topbar .brand{font-weight:800; font-size:17px; display:flex; align-items:center; gap:8px}
+.billing-topbar .brand i{color:var(--accent)}
+.billing-topbar .spacer{flex:1}
+.theme-switch-b{position:relative; width:46px; height:26px; border-radius:20px; background:var(--border); cursor:pointer; border:none}
+.theme-switch-b .knob{position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:var(--accent); transition:left .2s; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px}
+.billing-shell[data-theme="light"] .theme-switch-b .knob{left:23px}
+.billing-content{max-width:1180px; margin:0 auto; padding:26px 20px 70px}
+
+/* Trial banner */
+.trial-banner{background:linear-gradient(120deg,#0ea5e9,#10b981); border-radius:18px; padding:22px 26px;
+  color:#fff; margin-bottom:26px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+.trial-banner::after{content:"";position:absolute; right:-40px; top:-40px; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,.12)}
+.trial-banner h2{font-size:19px; font-weight:800; margin:0 0 4px}
+.trial-banner .sub{font-size:13px; opacity:.9; margin-bottom:14px}
+.trial-progress{height:9px; border-radius:8px; background:rgba(255,255,255,.28); overflow:hidden; max-width:420px}
+.trial-progress-bar{height:100%; background:#fff; border-radius:8px}
+.expired-banner{background:linear-gradient(120deg,#7f1d1d,#b91c1c); border-radius:18px; padding:22px 26px; color:#fff; margin-bottom:26px; box-shadow:var(--shadow)}
+
+/* Dashboard cards */
+.dash-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:26px}
+@media(max-width:1000px){.dash-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.dash-grid{grid-template-columns:1fr}}
+.dash-card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px;
+  box-shadow:var(--shadow); transition:transform .2s; display:flex; flex-direction:column; gap:6px}
+.dash-card:hover{transform:translateY(-3px)}
+.dash-card .icn{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; margin-bottom:2px}
+.dash-card .val{font-size:19px; font-weight:800}
+.dash-card .lbl{font-size:11.5px; color:var(--muted)}
+.quick-actions{display:flex; gap:10px; margin-bottom:26px; flex-wrap:wrap}
+
+.section-title{font-size:17px; font-weight:800; margin:34px 0 16px; display:flex; align-items:center; gap:8px}
+.section-title i{color:var(--accent)}
+
+/* Pricing cards */
+.pricing-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:18px}
+.pricing-card{background:var(--card); border:2px solid var(--border); border-radius:18px; padding:24px; position:relative;
+  transition:transform .25s,box-shadow .25s,border-color .25s; box-shadow:var(--shadow); cursor:pointer}
+.pricing-card:hover{transform:translateY(-6px); box-shadow:0 16px 34px rgba(0,0,0,.4)}
+.pricing-card.selected{border-color:var(--accent)}
+.pricing-card .ribbon{position:absolute; top:14px; right:-6px; background:linear-gradient(135deg,#f59e0b,#f97316); color:#fff;
+  font-size:10.5px; font-weight:800; padding:4px 12px; border-radius:6px 0 0 6px; text-transform:uppercase; letter-spacing:.03em}
+.pricing-card h3{font-size:17px; font-weight:800; margin:0 0 4px}
+.pricing-card .price{font-size:30px; font-weight:800; margin:10px 0 2px}
+.pricing-card .price small{font-size:12px; font-weight:500; color:var(--muted)}
+.pricing-card .gst-note{font-size:11px; color:var(--muted); margin-bottom:14px}
+.pricing-feature{display:flex; align-items:center; gap:8px; font-size:12.5px; padding:5px 0; color:var(--text)}
+.pricing-feature i{color:var(--accent); width:14px}
+.pricing-card .actions{margin-top:16px; display:flex; flex-direction:column; gap:8px}
+
+.saas-card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:20px; box-shadow:var(--shadow)}
+.saas-card input, .saas-card textarea{background:var(--bg); color:var(--text); border:1px solid var(--border)}
+.saas-card label{font-size:12px; color:var(--muted); margin-bottom:4px; display:block}
+
+.status-pill{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase}
+.status-pill.trial{background:rgba(59,130,246,.15); color:#3b82f6}
+.status-pill.active{background:rgba(16,185,129,.15); color:#10b981}
+.status-pill.expired,.status-pill.cancelled,.status-pill.suspended{background:rgba(239,68,68,.15); color:#ef4444}
+.status-pill.success{background:rgba(16,185,129,.15); color:#10b981}
+.status-pill.failed{background:rgba(239,68,68,.15); color:#ef4444}
+.status-pill.created,.status-pill.pending{background:rgba(148,163,184,.15); color:#94a3b8}
+
+.skel{border-radius:8px; background:linear-gradient(90deg,rgba(148,163,184,.08) 25%,rgba(148,163,184,.18) 37%,rgba(148,163,184,.08) 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skel-line{height:14px; margin:6px 0}
+
+.saas-shell table.dataTable, .billing-shell table.dataTable{color:var(--text)}
+.billing-shell table.dataTable thead th{color:var(--muted); border-bottom:1px solid var(--border) !important}
+.billing-shell table.dataTable tbody td{border-top:1px solid var(--border) !important}
+.billing-shell .dataTables_wrapper .dataTables_filter input,
+.billing-shell .dataTables_wrapper .dataTables_length select{background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px}
+.billing-shell .dataTables_wrapper .dataTables_info, .billing-shell .dataTables_wrapper .dataTables_paginate{color:var(--muted); font-size:12.5px}
+.billing-shell .dataTables_wrapper .dataTables_paginate .paginate_button{color:var(--text) !important}
+.billing-shell .dataTables_wrapper .dataTables_paginate .paginate_button.current{background:var(--accent) !important; color:#fff !important; border:none !important}
+.modal.saas-modal .modal-content{background:var(--card); color:var(--text); border:1px solid var(--border)}
+
+/* Inline field validation (Bootstrap's native is-invalid/invalid-feedback pattern) */
+.saas-card .form-control.is-invalid{border-color:var(--danger)}
+.saas-card .invalid-feedback{font-size:11.5px}
+.saas-card input:disabled, .saas-card button:disabled{opacity:.6; cursor:not-allowed}
+
+/* ============ Responsive hardening (320 / 375 / 390 / 414 / 768) ============ */
+@media(max-width:768px){
+  .billing-content{padding:18px 14px 60px}
+  .billing-topbar{padding:12px 14px; gap:8px}
+  .billing-topbar .brand span{display:none}
+  .dash-grid{grid-template-columns:repeat(2,1fr); gap:10px}
+  .pricing-grid{grid-template-columns:1fr}
+  .saas-card{padding:16px}
+}
+@media(max-width:480px){
+  .dash-grid{grid-template-columns:1fr}
+  .billing-topbar .btn span{display:none}
+  .trial-banner, .expired-banner{padding:16px}
+  .trial-progress{max-width:100%}
+  .pricing-card{padding:18px}
+  h1{font-size:20px !important}
+}
+.billing-shell, .billing-content{max-width:100%; overflow-x:hidden}
+.saas-card{overflow-x:auto}
+.modal-dialog{margin-left:auto; margin-right:auto; max-width:calc(100vw - 24px)}
+@media(min-width:576px){.modal-dialog{max-width:500px}}
+@media(min-width:992px){.modal-dialog.modal-lg{max-width:800px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="billing-shell" id="billingShell" data-theme="dark">
+  <div class="billing-topbar">
+    <a href="/dashboard" class="brand text-decoration-none" style="color:inherit"><i class="fa-solid fa-chart-line"></i> <span>AlgoBot</span></a>
+    <div class="spacer"></div>
+    <a href="/dashboard" class="btn btn-sm btn-outline-secondary" style="color:var(--text);border-color:var(--border)"><i class="fa-solid fa-arrow-left me-1"></i><span>Dashboard</span></a>
+    <button class="theme-switch-b" onclick="toggleBillingTheme()" title="Toggle theme"><span class="knob"><i class="fa-solid fa-moon"></i></span></button>
+  </div>
+
+  <div class="billing-content">
+    <h1 style="font-size:24px;font-weight:800;margin-bottom:6px">Billing &amp; Subscription</h1>
+    <p style="color:var(--muted);margin-bottom:22px">Manage your plan, billing address, payments and invoices.</p>
+
+    <div id="bannerSlot"></div>
+
+    <div class="dash-grid" id="dashGrid">
+      <div class="dash-card"><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:40%"></div></div>
+      <div class="dash-card"><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:40%"></div></div>
+      <div class="dash-card"><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:40%"></div></div>
+      <div class="dash-card"><div class="skel skel-line" style="width:60%"></div><div class="skel skel-line" style="width:40%"></div></div>
+    </div>
+
+    <div class="quick-actions" id="quickActions"></div>
+
+    <div class="section-title"><i class="fa-solid fa-tags"></i>Plans</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-sm btn-outline-secondary" style="color:var(--text);border-color:var(--border)" onclick="openComparePlans()"><i class="fa-solid fa-scale-balanced me-1"></i>Compare Plans</button>
+    </div>
+    <div class="pricing-grid" id="pricingGrid"></div>
+    <div id="plans-msg" class="mt-2"></div>
+
+    <!-- Contact Sales -->
+    <div class="saas-card" id="contact-sales-card" style="display:none; margin-top:26px">
+      <h2 class="section-title" style="margin-top:0"><i class="fa-solid fa-bullhorn"></i>Contact Sales — Enterprise</h2>
+      <p style="color:var(--muted)">Tell us about your requirements and our team will reach out with a custom plan.</p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label>Name</label>
+          <input id="cs-name" class="form-control" oninput="clearInvalid('cs-name')">
+          <div class="invalid-feedback" id="cs-name-err"></div>
+        </div>
+        <div class="col-md-6">
+          <label>Email</label>
+          <input id="cs-email" type="email" class="form-control" oninput="clearInvalid('cs-email')">
+          <div class="invalid-feedback" id="cs-email-err"></div>
+        </div>
+        <div class="col-md-6">
+          <label>Mobile Number (optional)</label>
+          <input id="cs-mobile" class="form-control" maxlength="10" inputmode="numeric" oninput="clearInvalid('cs-mobile')">
+          <div class="invalid-feedback" id="cs-mobile-err"></div>
+        </div>
+        <div class="col-md-12"><label>Message</label><textarea id="cs-message" class="form-control" rows="3"></textarea></div>
+      </div>
+      <button onclick="submitContactSales()" class="btn btn-brand mt-3" id="cs-submit-btn" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff">Submit</button>
+    </div>
+
+    <!-- Account Details -->
+    <div class="section-title"><i class="fa-solid fa-user"></i>Account Details</div>
+    <div class="saas-card">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label>Full Name</label>
+          <input id="acct-name" class="form-control" oninput="clearInvalid('acct-name')">
+          <div class="invalid-feedback" id="acct-name-err"></div>
+        </div>
+        <div class="col-md-4">
+          <label>Email</label>
+          <input id="acct-email" class="form-control" disabled title="Email cannot be changed here">
+        </div>
+        <div class="col-md-4">
+          <label>Mobile Number</label>
+          <input id="acct-mobile" class="form-control" maxlength="10" inputmode="numeric" oninput="clearInvalid('acct-mobile')">
+          <div class="invalid-feedback" id="acct-mobile-err"></div>
+        </div>
+      </div>
+      <button onclick="saveAccountDetails()" class="btn btn-brand mt-3" id="acct-save-btn" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff">Save Account Details</button>
+    </div>
+
+    <!-- Billing Address -->
+    <div class="section-title"><i class="fa-solid fa-address-card"></i>Billing Address</div>
+    <div class="saas-card">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label>Address Line 1</label>
+          <input id="b-addr1" class="form-control" oninput="clearInvalid('b-addr1')">
+          <div class="invalid-feedback" id="b-addr1-err"></div>
+        </div>
+        <div class="col-md-6"><label>Address Line 2 (optional)</label><input id="b-addr2" class="form-control"></div>
+        <div class="col-md-4">
+          <label>City</label>
+          <input id="b-city" class="form-control" oninput="clearInvalid('b-city')">
+          <div class="invalid-feedback" id="b-city-err"></div>
+        </div>
+        <div class="col-md-4">
+          <label>State</label>
+          <input id="b-state" class="form-control" oninput="clearInvalid('b-state')">
+          <div class="invalid-feedback" id="b-state-err"></div>
+        </div>
+        <div class="col-md-4">
+          <label>PIN Code</label>
+          <input id="b-pincode" class="form-control" maxlength="6" inputmode="numeric" oninput="clearInvalid('b-pincode')">
+          <div class="invalid-feedback" id="b-pincode-err"></div>
+        </div>
+        <div class="col-md-4">
+          <label>Country</label>
+          <input id="b-country" class="form-control" value="India" oninput="clearInvalid('b-country')">
+          <div class="invalid-feedback" id="b-country-err"></div>
+        </div>
+      </div>
+      <button onclick="saveBillingProfile()" class="btn btn-brand mt-3" id="baddr-save-btn" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff">Save Address</button>
+    </div>
+
+    <!-- Payment History -->
+    <div class="section-title"><i class="fa-solid fa-credit-card"></i>Payment History</div>
+    <div class="saas-card">
+      <table class="table" id="paymentsTable" style="width:100%; color:var(--text)">
+        <thead><tr><th>Amount</th><th>Provider</th><th>UTR / Ref</th><th>Status</th><th>Date</th><th>Remarks</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Invoices -->
+    <div class="section-title"><i class="fa-solid fa-file-invoice"></i>Invoices</div>
+    <div class="saas-card">
+      <div id="invoicesList"><div class="skel skel-line" style="width:80%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Compare Plans modal -->
+<div class="modal saas-modal" id="compareModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Compare Plans</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body"><div class="table-responsive"><table class="table" id="compareTable" style="color:var(--text)"></table></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Payment Modal -->
+<div class="modal saas-modal" id="manualPaymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Pay via UPI / PhonePe</h5>
+        <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="manualPaymentBody">
+        <div id="manualPaymentInfo" class="text-center mb-4">
+          <div id="manualQrContainer" style="display:none;margin-bottom:16px">
+            <img id="manualQrImg" src="" alt="QR Code" style="max-width:220px;border-radius:12px;border:2px solid var(--border)">
+          </div>
+          <div style="font-size:18px;font-weight:700;margin:8px 0" id="manualUpiDisplay">merchant@upi</div>
+          <div style="font-size:28px;font-weight:800;color:var(--accent);margin:8px 0" id="manualAmountDisplay">Rs. 0</div>
+          <div style="color:var(--muted);font-size:13px;margin:8px 0" id="manualInstructions">Scan the QR or pay to the UPI ID above</div>
+          <hr style="border-color:var(--border);margin:18px 0">
+          <div style="text-align:left">
+            <label>UTR / Transaction ID <span style="color:var(--danger)">*</span></label>
+            <input id="manual-utr" class="form-control mt-1" placeholder="Enter UTR number" maxlength="50" oninput="clearInvalid('manual-utr')">
+            <div class="invalid-feedback" id="manual-utr-err"></div>
+          </div>
+          <div style="text-align:left;margin-top:12px">
+            <label>Payment Screenshot (optional)</label>
+            <input id="manual-screenshot" type="file" class="form-control mt-1" accept="image/png,image/jpeg,image/jpg,image/gif">
+            <div class="text-muted small mt-1">PNG, JPG or GIF only. Max 5MB.</div>
+          </div>
+          <button class="btn btn-brand mt-4 w-100" id="manualSubmitBtn" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff;font-weight:700;padding:12px" onclick="submitManualPayment()">
+            <i class="fa-solid fa-paper-plane me-2"></i>Submit Payment
+          </button>
+        </div>
+        <div id="manualPaymentSuccess" style="display:none;text-align:center;padding:20px">
+          <i class="fa-solid fa-circle-check" style="font-size:48px;color:var(--accent)"></i>
+          <h4 class="mt-3">Payment Submitted!</h4>
+          <p style="color:var(--muted)">Your payment is pending verification. An admin will review and activate your subscription shortly.</p>
+          <button class="btn btn-outline-secondary mt-3" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+// ================================================================
+// Billing page — premium UI only. Every fetch below hits the exact
+// same /api/subscription/* endpoints as the previous plain version;
+// the Razorpay order/verify-payment flow itself is unchanged.
+// ================================================================
+
+function toggleBillingTheme() {
+  const shell = document.getElementById('billingShell');
+  const next = shell.dataset.theme === 'dark' ? 'light' : 'dark';
+  shell.dataset.theme = next;
+  localStorage.setItem('billing_theme', next);
+}
+
+const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2600, timerProgressBar: true, background: '#111827', color: '#e2e8f0' });
+function fmtMoney(n) { return 'Rs. ' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(s) { return s ? s.slice(0, 10) : '-'; }
+
+// ── Inline field validation (Bootstrap is-invalid / invalid-feedback) ──
+function markInvalid(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  const err = document.getElementById(fieldId + '-err');
+  if (input) input.classList.add('is-invalid');
+  if (err) err.textContent = message;
+}
+function clearInvalid(fieldId) {
+  const input = document.getElementById(fieldId);
+  const err = document.getElementById(fieldId + '-err');
+  if (input) input.classList.remove('is-invalid');
+  if (err) err.textContent = '';
+}
+function clearInvalidAll(fieldIds) { fieldIds.forEach(clearInvalid); }
+
+// Formats a FastAPI error response into a human-readable string — handles
+// both a plain string `detail` and Pydantic's structured 422 error array.
+function formatApiError(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map(e => {
+      const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : 'field';
+      return `${field}: ${e.msg}`;
+    }).join('; ');
+  }
+  return fallback;
+}
+async function withButtonBusy(btnId, busyText, fn) {
+  const btn = document.getElementById(btnId);
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = busyText; }
+  try { return await fn(); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
+}
+
+let currentSub = null, currentPlans = [], selectedPlanId = null;
+let dtPayments;
+
+// ── Subscription status + trial banner + dashboard cards ─────────
+async function loadSubscription() {
+  const r = await apiFetch('/api/subscription/me');
+  if (!r || !r.ok) return;
+  currentSub = await r.json();
+  renderBanner();
+  renderDashCards();
+  renderQuickActions();
+}
+
+function renderBanner() {
+  const slot = document.getElementById('bannerSlot');
+  if (!currentSub || currentSub.status === 'none') {
+    slot.innerHTML = `<div class="expired-banner"><h2><i class="fa-solid fa-lock me-2"></i>Subscription Required</h2>
+      <div class="sub">Subscribe to a plan below to start trading.</div></div>`;
+    return;
+  }
+  if (['expired', 'cancelled', 'suspended'].includes(currentSub.status)) {
+    slot.innerHTML = `<div class="expired-banner"><h2><i class="fa-solid fa-triangle-exclamation me-2"></i>Your subscription is ${currentSub.status}</h2>
+      <div class="sub">Renew your plan below to resume trading.</div></div>`;
+    return;
+  }
+  if (currentSub.status === 'trial') {
+    const total = 7, remaining = currentSub.remaining_days, elapsedPct = Math.min(100, Math.round(((total - remaining) / total) * 100));
+    slot.innerHTML = `<div class="trial-banner">
+      <h2><i class="fa-solid fa-rocket me-2"></i>Free Trial Active</h2>
+      <div class="sub">${remaining} day(s) remaining · Expires ${fmtDate(currentSub.end_date)} · Paper trading only</div>
+      <div class="trial-progress"><div class="trial-progress-bar" style="width:${elapsedPct}%"></div></div>
+      <button class="btn btn-light btn-sm mt-3 fw-bold" onclick="document.getElementById('pricingGrid').scrollIntoView({behavior:'smooth'})">Upgrade Now <i class="fa-solid fa-arrow-right ms-1"></i></button>
+    </div>`;
+    return;
+  }
+  slot.innerHTML = '';
+}
+
+function renderDashCards() {
+  const grid = document.getElementById('dashGrid');
+  if (!currentSub || currentSub.status === 'none') {
+    grid.innerHTML = `<div class="dash-card"><div class="lbl">No active plan</div></div>`;
+    return;
+  }
+  const symbols = Object.keys(currentSub.allowed_symbols || {});
+  const maxLots = symbols.length ? Math.max(...Object.values(currentSub.allowed_symbols)) : 0;
+  const cards = [
+    { icon: 'fa-layer-group', color: '#3b82f6', label: 'Current Plan', val: currentSub.plan_name || (currentSub.is_trial ? 'Free Trial' : '-') },
+    { icon: 'fa-signal', color: '#10b981', label: 'Status', val: currentSub.status.toUpperCase() },
+    { icon: 'fa-chart-simple', color: '#8b5cf6', label: 'Allowed Symbols', val: symbols.join(', ') || '-' },
+    { icon: 'fa-calendar-check', color: '#f59e0b', label: 'Next Renewal', val: fmtDate(currentSub.end_date) + ` (${currentSub.remaining_days}d)` },
+  ];
+  grid.innerHTML = cards.map(c => `
+    <div class="dash-card">
+      <div class="icn" style="background:${c.color}"><i class="fa-solid ${c.icon}"></i></div>
+      <div class="val">${c.val}</div><div class="lbl">${c.label}</div>
+    </div>`).join('');
+}
+
+function renderQuickActions() {
+  const el = document.getElementById('quickActions');
+  if (!currentSub || currentSub.status === 'none') { el.innerHTML = ''; return; }
+  if (currentSub.status === 'active') {
+    el.innerHTML = `
+      <button class="btn btn-brand" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff" onclick="quickRenew()"><i class="fa-solid fa-rotate me-1"></i>Quick Renew</button>
+      <button class="btn btn-outline-secondary" style="color:var(--text);border-color:var(--border)" onclick="document.getElementById('pricingGrid').scrollIntoView({behavior:'smooth'})"><i class="fa-solid fa-arrow-up me-1"></i>Upgrade Plan</button>`;
+  } else { el.innerHTML = ''; }
+}
+
+async function quickRenew() {
+  const r = await apiFetch('/api/subscription/renew', { method: 'POST' });
+  if (!r) return;
+  const data = await r.json();
+  if (!r.ok) { toast.fire({ icon: 'error', title: formatApiError(data, 'Renew failed') }); return; }
+  launchRazorpay(data);
+}
+
+// ── Pricing cards ─────────────────────────────────────────────────
+async function loadPlans() {
+  const r = await apiFetch('/api/subscription/plans');
+  if (!r || !r.ok) return;
+  currentPlans = await r.json();
+  renderPricingGrid();
+}
+
+function renderPricingGrid() {
+  const sorted = [...currentPlans].sort((a, b) => a.monthly_price - b.monthly_price);
+  const nonContact = sorted.filter(p => !p.is_contact_sales);
+  const recommendedId = nonContact.length > 1 ? nonContact[Math.floor(nonContact.length / 2)].id : null;
+
+  document.getElementById('pricingGrid').innerHTML = sorted.map(p => {
+    const symbols = p.symbols.map(s => s.symbol).join(', ') || '-';
+    const maxLot = p.symbols.length ? Math.max(...p.symbols.map(s => s.lot_limit)) : 0;
+    const features = [
+      `${p.symbols.length} symbol${p.symbols.length !== 1 ? 's' : ''}: ${symbols}`,
+      `Max ${maxLot} lot${maxLot !== 1 ? 's' : ''} per symbol`,
+      `${p.duration_days}-day duration`,
+      p.gst_percentage ? `+${p.gst_percentage}% GST` : 'No GST',
+    ];
+    return `
+    <div class="pricing-card ${p.id === selectedPlanId ? 'selected' : ''}" onclick="selectPlanCard(${p.id})">
+      ${p.id === recommendedId ? '<div class="ribbon">Recommended</div>' : ''}
+      <h3>${p.name}</h3>
+      <div class="price">${p.is_contact_sales ? 'Contact Sales' : fmtMoney(p.monthly_price)}${!p.is_contact_sales ? '<small>/mo</small>' : ''}</div>
+      <div class="gst-note">${p.is_contact_sales ? 'Custom pricing for your needs' : (p.gst_percentage ? `+ ${p.gst_percentage}% GST` : 'GST included')}</div>
+      ${features.map(f => `<div class="pricing-feature"><i class="fa-solid fa-check"></i>${f}</div>`).join('')}
+      <div class="actions">
+        ${p.is_contact_sales
+          ? `<button class="btn btn-outline-secondary" style="color:var(--text);border-color:var(--border)" onclick="event.stopPropagation(); showContactSales()">Contact Sales</button>`
+          : `<button class="btn btn-brand" style="background:linear-gradient(135deg,#10b981,#059669);border:none;color:#fff" onclick="event.stopPropagation(); startCheckout(${p.id})">Buy Now</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectPlanCard(id) { selectedPlanId = id; renderPricingGrid(); }
+
+function openComparePlans() {
+  const rows = [];
+  rows.push('<tr><th>Plan</th>' + currentPlans.map(p => `<th>${p.name}</th>`).join('') + '</tr>');
+  rows.push('<tr><td>Price</td>' + currentPlans.map(p => `<td>${p.is_contact_sales ? 'Contact Sales' : fmtMoney(p.monthly_price)}</td>`).join('') + '</tr>');
+  rows.push('<tr><td>GST</td>' + currentPlans.map(p => `<td>${p.gst_percentage}%</td>`).join('') + '</tr>');
+  rows.push('<tr><td>Duration</td>' + currentPlans.map(p => `<td>${p.duration_days} days</td>`).join('') + '</tr>');
+  rows.push('<tr><td>Symbols</td>' + currentPlans.map(p => `<td>${p.symbols.map(s => s.symbol).join(', ') || '-'}</td>`).join('') + '</tr>');
+  rows.push('<tr><td>Lot Limits</td>' + currentPlans.map(p => `<td>${p.symbols.map(s => s.symbol + ':' + s.lot_limit).join(', ') || '-'}</td>`).join('') + '</tr>');
+  document.getElementById('compareTable').innerHTML = `<thead>${rows[0]}</thead><tbody>${rows.slice(1).join('')}</tbody>`;
+  new bootstrap.Modal(document.getElementById('compareModal')).show();
+}
+
+function showContactSales() {
+  document.getElementById('contact-sales-card').style.display = 'block';
+  document.getElementById('contact-sales-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function validateContactSalesForm() {
+  clearInvalidAll(['cs-name', 'cs-email', 'cs-mobile']);
+  let valid = true;
+  if (!document.getElementById('cs-name').value.trim()) { markInvalid('cs-name', 'Name is required'); valid = false; }
+  const email = document.getElementById('cs-email').value.trim();
+  if (!email) { markInvalid('cs-email', 'Email is required'); valid = false; }
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { markInvalid('cs-email', 'Enter a valid email address'); valid = false; }
+  const mobile = document.getElementById('cs-mobile').value.trim();
+  if (mobile && !/^[6-9]\d{9}$/.test(mobile)) { markInvalid('cs-mobile', 'Enter a valid 10-digit mobile number'); valid = false; }
+  return valid;
+}
+
+async function submitContactSales() {
+  if (!validateContactSalesForm()) return;
+  const body = {
+    name: document.getElementById('cs-name').value.trim(),
+    email: document.getElementById('cs-email').value.trim(),
+    mobile_number: document.getElementById('cs-mobile').value.trim() || null,
+    message: document.getElementById('cs-message').value.trim() || null,
+  };
+  await withButtonBusy('cs-submit-btn', 'Submitting…', async () => {
+    const r = await apiFetch('/api/subscription/contact-sales', { method: 'POST', body: JSON.stringify(body) });
+    const data = await r?.json().catch(() => null);
+    if (r?.ok) toast.fire({ icon: 'success', title: 'Thanks — our team will reach out shortly' });
+    else toast.fire({ icon: 'error', title: formatApiError(data, 'Failed to submit') });
+  });
+}
+
+// ── Checkout (Razorpay + Manual Payment) ─────────────────────────
+let currentCheckoutData = null;
+
+async function startCheckout(planId) {
+  const r = await apiFetch('/api/subscription/order', { method: 'POST', body: JSON.stringify({ plan_id: planId }) });
+  if (!r) return;
+  const data = await r.json();
+  if (!r.ok) { toast.fire({ icon: 'error', title: formatApiError(data, 'Failed to start checkout') }); return; }
+
+  currentCheckoutData = data;
+
+  // Manual payment mode
+  if (data.payment_mode === 'MANUAL') {
+    showManualPaymentModal(data);
+    return;
+  }
+
+  // Razorpay mode
+  launchRazorpay(data);
+}
+
+function showManualPaymentModal(data) {
+  document.getElementById('manualUpiDisplay').textContent = data.upi_id || 'merchant@upi';
+  document.getElementById('manualAmountDisplay').textContent = fmtMoney(data.total_amount);
+  document.getElementById('manualInstructions').textContent = data.instructions || 'Scan the QR or pay to the UPI ID above';
+  document.getElementById('manual-utr').value = '';
+  document.getElementById('manual-screenshot').value = '';
+  document.getElementById('manualPaymentInfo').style.display = 'block';
+  document.getElementById('manualPaymentSuccess').style.display = 'none';
+  document.getElementById('manualSubmitBtn').disabled = false;
+  document.getElementById('manualSubmitBtn').innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i>Submit Payment';
+
+  // Handle QR code path
+  const qrContainer = document.getElementById('manualQrContainer');
+  const qrImg = document.getElementById('manualQrImg');
+  if (data.qr_code_path) {
+    qrContainer.style.display = 'block';
+    qrImg.src = data.qr_code_path.startsWith('http') ? data.qr_code_path : '/static/uploads/' + data.qr_code_path;
+  } else {
+    qrContainer.style.display = 'none';
+  }
+
+  new bootstrap.Modal(document.getElementById('manualPaymentModal')).show();
+}
+
+async function submitManualPayment() {
+  const utr = document.getElementById('manual-utr').value.trim();
+  if (!utr) {
+    markInvalid('manual-utr', 'UTR / Transaction ID is required');
+    return;
+  }
+  clearInvalid('manual-utr');
+
+  const screenshotFile = document.getElementById('manual-screenshot').files[0];
+  if (screenshotFile && screenshotFile.size > 5 * 1024 * 1024) {
+    toast.fire({ icon: 'error', title: 'Screenshot exceeds 5MB limit' });
+    return;
+  }
+
+  const btn = document.getElementById('manualSubmitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Submitting…';
+
+  try {
+    const formData = new FormData();
+    formData.append('plan_id', currentCheckoutData.plan_id);
+    formData.append('utr_number', utr);
+    if (screenshotFile) {
+      formData.append('screenshot', screenshotFile);
+    }
+
+    const token = getToken();
+    const r = await fetch('/api/payment/manual/submit', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: formData,
+    });
+    const data = await r.json();
+    if (r.ok) {
+      document.getElementById('manualPaymentInfo').style.display = 'none';
+      document.getElementById('manualPaymentSuccess').style.display = 'block';
+      toast.fire({ icon: 'success', title: 'Payment submitted for verification!' });
+      loadSubscription(); loadPayments();
+    } else {
+      toast.fire({ icon: 'error', title: formatApiError(data, 'Failed to submit payment') });
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i>Submit Payment';
+    }
+  } catch (e) {
+    toast.fire({ icon: 'error', title: 'Failed to submit payment' });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i>Submit Payment';
+  }
+}
+
+function launchRazorpay(data) {
+  if (typeof Razorpay === 'undefined') { toast.fire({ icon: 'error', title: 'Payment gateway failed to load' }); return; }
+  const rzp = new Razorpay({
+    key: data.key_id, order_id: data.order_id, amount: data.amount, currency: data.currency,
+    name: 'AlgoBot', description: (data.plan_name || '') + ' subscription',
+    handler: async function (response) {
+      const vr = await apiFetch('/api/subscription/verify-payment', {
+        method: 'POST',
+        body: JSON.stringify({
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        }),
+      });
+      if (vr?.ok) {
+        Swal.fire({ icon: 'success', title: 'Payment Verified!', text: 'Your subscription is now active.', background: '#111827', color: '#e2e8f0', confirmButtonColor: '#10b981' });
+        loadSubscription(); loadPayments(); loadInvoices();
+      } else {
+        toast.fire({ icon: 'error', title: 'Payment verification failed' });
+      }
+    },
+    theme: { color: '#10b981' },
+  });
+  rzp.open();
+}
+
+// ── Account details (name / email / mobile number) ─────────────────
+// Fixes the mobile-number round-trip: loaded from GET /api/users/me,
+// submitted + saved via PATCH /api/users/profile, and re-displayed
+// after a refresh via the same GET call.
+async function loadAccountDetails() {
+  const r = await apiFetch('/api/users/me');
+  if (!r || !r.ok) return;
+  const u = await r.json();
+  document.getElementById('acct-name').value = u.full_name || '';
+  document.getElementById('acct-email').value = u.email || '';
+  document.getElementById('acct-mobile').value = u.mobile_number || '';
+}
+
+function validateAccountDetailsForm() {
+  clearInvalidAll(['acct-name', 'acct-mobile']);
+  let valid = true;
+  const name = document.getElementById('acct-name').value.trim();
+  if (!name) { markInvalid('acct-name', 'Full name is required'); valid = false; }
+  const mobile = document.getElementById('acct-mobile').value.trim();
+  if (!mobile) { markInvalid('acct-mobile', 'Mobile number is required'); valid = false; }
+  else if (!/^[6-9]\d{9}$/.test(mobile)) { markInvalid('acct-mobile', 'Enter a valid 10-digit mobile number'); valid = false; }
+  return valid;
+}
+
+async function saveAccountDetails() {
+  if (!validateAccountDetailsForm()) return;
+  const body = {
+    full_name: document.getElementById('acct-name').value.trim(),
+    mobile_number: document.getElementById('acct-mobile').value.trim(),
+  };
+  await withButtonBusy('acct-save-btn', 'Saving…', async () => {
+    const r = await apiFetch('/api/users/profile', { method: 'PATCH', body: JSON.stringify(body) });
+    const data = await r?.json().catch(() => null);
+    if (r?.ok) {
+      toast.fire({ icon: 'success', title: 'Account details saved' });
+      loadAccountDetails(); // re-load to confirm it persisted (displayed after refresh)
+    } else {
+      toast.fire({ icon: 'error', title: formatApiError(data, 'Failed to save account details') });
+    }
+  });
+}
+
+// ── Billing profile ────────────────────────────────────────────────
+async function loadBillingProfile() {
+  const r = await apiFetch('/api/subscription/billing-profile');
+  if (!r || !r.ok) return;
+  const p = await r.json();
+  if (!p) return;
+  document.getElementById('b-addr1').value = p.address_line1 || '';
+  document.getElementById('b-addr2').value = p.address_line2 || '';
+  document.getElementById('b-city').value = p.city || '';
+  document.getElementById('b-state').value = p.state || '';
+  document.getElementById('b-pincode').value = p.pincode || '';
+  document.getElementById('b-country').value = p.country || 'India';
+}
+
+function validateBillingAddressForm() {
+  clearInvalidAll(['b-addr1', 'b-city', 'b-state', 'b-pincode', 'b-country']);
+  let valid = true;
+  if (!document.getElementById('b-addr1').value.trim()) { markInvalid('b-addr1', 'Address Line 1 is required'); valid = false; }
+  if (!document.getElementById('b-city').value.trim()) { markInvalid('b-city', 'City is required'); valid = false; }
+  if (!document.getElementById('b-state').value.trim()) { markInvalid('b-state', 'State is required'); valid = false; }
+  const pincode = document.getElementById('b-pincode').value.trim();
+  if (!pincode) { markInvalid('b-pincode', 'PIN code is required'); valid = false; }
+  else if (!/^\d{6}$/.test(pincode)) { markInvalid('b-pincode', 'Enter a valid 6-digit PIN code'); valid = false; }
+  if (!document.getElementById('b-country').value.trim()) { markInvalid('b-country', 'Country is required'); valid = false; }
+  return valid;
+}
+
+async function saveBillingProfile() {
+  if (!validateBillingAddressForm()) return;
+  const body = {
+    address_line1: document.getElementById('b-addr1').value.trim(),
+    address_line2: document.getElementById('b-addr2').value.trim() || null,
+    city: document.getElementById('b-city').value.trim(),
+    state: document.getElementById('b-state').value.trim(),
+    pincode: document.getElementById('b-pincode').value.trim(),
+    country: document.getElementById('b-country').value.trim() || 'India',
+  };
+  await withButtonBusy('baddr-save-btn', 'Saving…', async () => {
+    const r = await apiFetch('/api/subscription/billing-profile', { method: 'POST', body: JSON.stringify(body) });
+    const data = await r?.json().catch(() => null);
+    if (r?.ok) toast.fire({ icon: 'success', title: 'Billing address saved' });
+    else toast.fire({ icon: 'error', title: formatApiError(data, 'Failed to save address') });
+  });
+}
+
+// ── Payments / Invoices ───────────────────────────────────────────
+async function loadPayments() {
+  const r = await apiFetch('/api/subscription/payments');
+  if (!r || !r.ok) return;
+  const payments = await r.json();
+  document.querySelector('#paymentsTable tbody').innerHTML = payments.map(p => {
+    const provider = p.payment_provider || 'RAZORPAY';
+    const utrRef = p.utr_number || p.razorpay_payment_id || p.razorpay_order_id || '-';
+    const remarks = p.remarks || '';
+    return `<tr>
+      <td>${fmtMoney(p.total_amount)}</td>
+      <td><span class="status-pill ${provider.toLowerCase()}">${provider}</span></td>
+      <td style="font-size:11px">${utrRef}</td>
+      <td><span class="status-pill ${p.status}">${p.status}</span></td>
+      <td>${fmtDate(p.created_at)}</td>
+      <td style="font-size:11px;color:var(--muted)">${remarks}</td>
+    </tr>`;
+  }).join('');
+  if (dtPayments) dtPayments.destroy();
+  dtPayments = $('#paymentsTable').DataTable({ pageLength: 5, lengthChange: false, order: [[4, 'desc']] });
+}
+
+async function loadInvoices() {
+  const r = await apiFetch('/api/subscription/invoices');
+  if (!r || !r.ok) return;
+  const invoices = await r.json();
+  document.getElementById('invoicesList').innerHTML = invoices.length ? invoices.map(i => `
+    <div class="d-flex justify-content-between align-items-center py-2 border-bottom" style="border-color:var(--border)!important">
+      <div><b>${i.invoice_number}</b> — ${i.plan_name} — ${fmtMoney(i.total_amount)}<div class="text-muted small">${fmtDate(i.issued_at)}</div></div>
+      <button class="btn btn-sm btn-outline-secondary" style="color:var(--text);border-color:var(--border)" onclick="downloadInvoice(${i.id})"><i class="fa-solid fa-download"></i></button>
+    </div>`).join('') : '<div class="text-muted text-center py-3">No invoices yet</div>';
+}
+
+async function downloadInvoice(id) {
+  const token = getToken();
+  const resp = await fetch(`/api/subscription/invoices/${id}/download`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!resp.ok) { toast.fire({ icon: 'error', title: 'Download failed' }); return; }
+  const blob = await resp.blob(); const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `invoice-${id}.pdf`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const savedTheme = localStorage.getItem('billing_theme');
+  if (savedTheme) document.getElementById('billingShell').dataset.theme = savedTheme;
+  loadSubscription();
+  loadPlans();
+  loadAccountDetails();
+  loadBillingProfile();
+  loadPayments();
+  loadInvoices();
+});
+</script>
+{% endblock %}

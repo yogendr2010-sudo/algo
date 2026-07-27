@@ -1,0 +1,502 @@
+/* ================================================================
+   AlgoBot — Main Stylesheet
+   Dark theme, professional trading UI
+================================================================ */
+:root {
+  --bg:      #0a0f1e;
+  --card:    #111827;
+  --card2:   #1a2235;
+  --border:  #1f2d45;
+  --text:    #e2e8f0;
+  --muted:   #64748b;
+  --green:   #10b981;
+  --red:     #ef4444;
+  --blue:    #3b82f6;
+  --amber:   #f59e0b;
+  --purple:  #8b5cf6;
+  --radius:  12px;
+  --shadow:  0 4px 24px rgba(0,0,0,.4);
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ================================================================
+   NAVBAR
+================================================================ */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  height: 56px;
+  background: rgba(17,24,39,.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-brand {
+  font-size: 17px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -.3px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: all .2s;
+}
+
+.nav-links a:hover,
+.nav-links a.active { color: var(--text); background: var(--card2); }
+
+.btn-logout {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: 8px;
+  transition: all .2s;
+}
+.btn-logout:hover { color: var(--red); border-color: var(--red); }
+
+/* ================================================================
+   LAYOUT
+================================================================ */
+.main-content {
+  padding: 20px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-wrap { max-width: 920px; margin: 0 auto; }
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+
+h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin-bottom: 14px; }
+
+/* ================================================================
+   CARDS
+================================================================ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  transition: border-color .2s;
+}
+.card:hover { border-color: rgba(59,130,246,.2); }
+
+/* ================================================================
+   AUTH PAGE
+================================================================ */
+.auth-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,.08) 0%, transparent 70%);
+}
+
+.auth-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--shadow);
+}
+
+.auth-logo {
+  font-size: 26px;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, var(--green), var(--blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.auth-sub {
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 28px;
+  font-size: 13px;
+}
+
+.tab-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: var(--bg);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all .2s;
+}
+.tab.active { background: var(--blue); color: #fff; }
+
+/* ================================================================
+   INPUTS & FORMS
+================================================================ */
+.inp {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 12px;
+  outline: none;
+  transition: border-color .2s;
+  font-family: inherit;
+}
+.inp:focus     { border-color: var(--blue); }
+.inp:disabled  { opacity: .5; cursor: not-allowed; }
+.inp.invalid   { border-color: var(--red); }
+textarea.inp   { resize: vertical; min-height: 80px; }
+
+/* Inline field validation error — reusable across every form in the app */
+.field-error { color: var(--red); font-size: 11.5px; margin: -8px 0 10px 2px; display: none; }
+.field-error.show { display: block; }
+select.inp     { cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L2 5h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center; }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+@media(max-width:600px) { .form-grid { grid-template-columns: 1fr; } }
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+label .inp { margin-bottom: 0; }
+
+/* ================================================================
+   BUTTONS
+================================================================ */
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .2s, transform .1s;
+  font-family: inherit;
+}
+.btn-primary:hover   { opacity: .88; }
+.btn-primary:active  { transform: scale(.98); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.w100 { width: 100%; }
+
+/* ================================================================
+   MESSAGES
+================================================================ */
+.msg {
+  margin-top: 10px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-height: 0;
+}
+.msg:empty    { display: none; }
+.msg.success  { background: rgba(16,185,129,.12); color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+.msg.error    { background: rgba(239,68,68,.12);  color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+.msg.info     { background: rgba(59,130,246,.12); color: var(--blue);  border: 1px solid rgba(59,130,246,.3); }
+
+/* ================================================================
+   BADGES & TAGS
+================================================================ */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-target   { background: rgba(16,185,129,.15);  color: var(--green); }
+.badge-sl       { background: rgba(239,68,68,.15);   color: var(--red);   }
+.badge-running  { background: rgba(16,185,129,.15);  color: var(--green); }
+.badge-stopped  { background: rgba(100,116,139,.12); color: var(--muted); }
+.badge-manual   { background: rgba(139,92,246,.15);  color: var(--purple);}
+.badge-paper    { background: rgba(245,158,11,.15);  color: var(--amber); }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tag-new  { background: rgba(16,185,129,.15); color: var(--green); }
+.tag-warn { background: rgba(245,158,11,.15); color: var(--amber); }
+
+/* ================================================================
+   TABLES
+================================================================ */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(31,45,69,.6);
+  vertical-align: middle;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(255,255,255,.02); }
+.data-table .green { color: var(--green); font-weight: 600; }
+.data-table .red   { color: var(--red);   font-weight: 600; }
+
+/* ================================================================
+   PAGINATION
+================================================================ */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.pagination button {
+  padding: 6px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.pagination button:hover    { background: var(--card2); }
+.pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.pagination span            { color: var(--muted); }
+
+/* ================================================================
+   UTILITIES
+================================================================ */
+.muted   { color: var(--muted); }
+.green   { color: var(--green); }
+.red     { color: var(--red);   }
+.amber   { color: var(--amber); }
+.center  { text-align: center; }
+.bold    { font-weight: 700; }
+code {
+  background: var(--card2);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--blue);
+}
+p.muted { line-height: 1.7; font-size: 13px; margin-bottom: 12px; }
+
+/* ================================================================
+   SETTINGS PAGE EXTRAS
+================================================================ */
+.warn {
+  background: rgba(245,158,11,.1);
+  border: 1px solid rgba(245,158,11,.4);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--amber);
+  margin-top: 8px;
+}
+
+.mode-toggle { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.mode-opt    { flex: 1; min-width: 200px; cursor: pointer; }
+.mode-opt input[type=radio] { display: none; }
+.mode-label {
+  display: block;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: all .2s;
+  cursor: pointer;
+}
+.mode-opt input:checked + .mode-label.paper { border-color: var(--amber); background: rgba(245,158,11,.07); }
+.mode-opt input:checked + .mode-label.live  { border-color: var(--red);   background: rgba(239,68,68,.07);  }
+.mode-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 400; }
+
+.chk-row   { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+.chk-label { display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--text); cursor: pointer; font-weight: 400; }
+.chk-label input { width: 15px; height: 15px; accent-color: var(--green); cursor: pointer; }
+
+.btn-test {
+  padding: 10px 18px;
+  background: rgba(59,130,246,.12);
+  color: var(--blue);
+  border: 1px solid rgba(59,130,246,.4);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s;
+}
+.btn-test:hover { background: rgba(59,130,246,.22); }
+
+.save-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+.save-row .btn-primary { width: auto; flex: 1; }
+
+/* ================================================================
+   ADMIN PAGE
+================================================================ */
+.admin-user-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.admin-btn:hover           { background: var(--card2); }
+.admin-btn.danger          { border-color: var(--red);  color: var(--red); }
+.admin-btn.danger:hover    { background: rgba(239,68,68,.1); }
+.admin-btn.success         { border-color: var(--green); color: var(--green); }
+.admin-btn.success:hover   { background: rgba(16,185,129,.1); }
+
+/* ================================================================
+   TABLES — horizontal scroll wrapper for mobile
+================================================================ */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-wrap .data-table { min-width: 600px; }
+
+/* ================================================================
+   RESPONSIVE
+================================================================ */
+@media(max-width: 768px) {
+  .main-content { padding: 12px; }
+  .navbar {
+    padding: 8px 12px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    row-gap: 6px;
+  }
+  .nav-brand { font-size: 15px; flex: 1 1 100%; text-align: center; order: -1; }
+  .nav-links {
+    flex: 1 1 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .nav-links a { padding: 6px 10px; font-size: 12px; }
+  .btn-logout  { padding: 6px 10px; font-size: 12px; margin-left: 4px; }
+  h1 { font-size: 18px; }
+
+  .card { padding: 14px 14px; }
+
+  /* Force any 2-4 column grids to stack on phones */
+  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .form-grid   { grid-template-columns: 1fr; }
+}
+
+@media(max-width: 420px) {
+  .stat-grid-4 { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .mini-val    { font-size: 18px; }
+  .auth-box    { padding: 28px 20px; }
+  .nav-links a { padding: 5px 8px; font-size: 11px; }
+}

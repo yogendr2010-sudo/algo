@@ -1,0 +1,53 @@
+# /etc/systemd/system/algo_bot-web.service
+#
+# Production systemd service for the AlgoBot WEB process (FastAPI/uvicorn).
+#
+# This process is now STATELESS — all per-user bot state lives in Redis
+# and the worker process (worker.py, see algo_bot-worker.service). You
+# CAN run multiple uvicorn workers and/or multiple instances of this
+# service behind a load balancer; they all share state via Redis.
+#
+# Install:
+#   sudo cp scripts/algo_bot-web.service /etc/systemd/system/
+#   sudo cp scripts/algo_bot-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now algo_bot-web algo_bot-worker
+#
+# Logs:
+#   sudo journalctl -u algo_bot-web -f
+#   sudo journalctl -u algo_bot-worker -f
+#
+# IMPORTANT: exactly ONE algo_bot-worker process must run (it owns the
+# live SymbolEngine/BotThread instances and the Telegram engine
+# registry). The web process can be scaled freely.
+
+[Unit]
+Description=AlgoBot Web (FastAPI/uvicorn)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=algo_bot
+Group=algo_bot
+WorkingDirectory=/opt/option_algo
+EnvironmentFile=/opt/option_algo/.env
+# --workers can be increased (e.g. 2-4) since this process is stateless.
+# Start with 1; raise only if CPU-bound on request handling.
+ExecStart=/opt/option_algo/venv/bin/uvicorn backend.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    --log-level warning
+
+TimeoutStopSec=15
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

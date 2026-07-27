@@ -1,0 +1,1584 @@
+{% extends "base.html" %}
+{% block title %}Settings — AlgoBot{% endblock %}
+{% block content %}
+<div class="page-wrap">
+  <h1>Settings</h1>
+
+  <!-- Account Status -->
+  <div class="card" id="account-status-card">
+    <h2>Account</h2>
+    <div id="account-status-body" class="muted">Loading…</div>
+  </div>
+
+  <!-- Upstox Connection -->
+  <div class="card">
+    <h2>Upstox Connection</h2>
+
+    <div id="upstox-status-box" class="upstox-status">
+      <span id="upstox-status-text" class="muted">Checking status…</span>
+    </div>
+
+    <!-- Step 1: one-time API key/secret -->
+    <details id="upstox-creds-box" class="upstox-creds">
+      <summary>1. API Key &amp; Secret <span class="muted">(one-time setup)</span></summary>
+      <p class="muted" style="margin-top:8px">
+        Create an app at
+        <a href="https://account.upstox.com/developer/apps" target="_blank"
+          rel="noopener">account.upstox.com/developer/apps</a>
+        and set its <b>Redirect URI</b> to:
+      </p>
+      <div class="redirect-uri-row">
+        <code id="redirect-uri">–</code>
+        <button type="button" class="btn-secondary btn-sm" onclick="copyRedirectUri()">Copy</button>
+      </div>
+      <div class="form-grid" style="margin-top:10px">
+        <label>API Key
+          <input id="upstox-api-key" class="inp" type="text" placeholder="Your Upstox API Key" />
+        </label>
+        <label>API Secret
+          <input id="upstox-api-secret" class="inp" type="password" placeholder="Your Upstox API Secret" />
+        </label>
+      </div>
+      <button onclick="saveUpstoxCredentials()" class="btn-primary" style="margin-top:8px">Save Credentials</button>
+      <div id="creds-msg" class="msg"></div>
+    </details>
+
+    <!-- Step 2: connect / refresh -->
+    <div class="upstox-connect-row">
+      <button id="btn-upstox-connect" onclick="connectUpstox()" class="btn-primary">Connect to Upstox</button>
+      <p class="muted" style="margin-top:6px">
+        Upstox access tokens expire daily around 3:30 AM IST — click
+        <b>Refresh Token</b> once each morning before starting the bot.
+      </p>
+    </div>
+    <div id="upstox-msg" class="msg"></div>
+
+    <!-- Fallback: manual paste -->
+    <details class="upstox-creds" style="margin-top:14px">
+      <summary>Advanced: paste token manually <span class="muted">(fallback)</span></summary>
+      <p class="muted" style="margin-top:8px">If the Connect button doesn't work in your setup,
+        generate a token with <code>python scripts\get_upstox_token.py</code> and paste it here.</p>
+      <textarea id="upstox-token" class="inp" rows="3" placeholder="Paste your Upstox access token here..."></textarea>
+      <button onclick="saveToken()" class="btn-secondary">Save Token</button>
+      <div id="token-msg" class="msg"></div>
+    </details>
+  </div>
+
+  <style>
+    .upstox-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--card-alt, #1a2636);
+      margin-bottom: 14px;
+      font-size: 13px
+    }
+
+    .upstox-status.ok {
+      border-left: 3px solid var(--green, #00c87a)
+    }
+
+    .upstox-status.warn {
+      border-left: 3px solid var(--yellow, #f5a623)
+    }
+
+    .upstox-status.err {
+      border-left: 3px solid var(--red, #ff4d4d)
+    }
+
+    .upstox-creds {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border, #2a3a4a);
+      border-radius: 8px
+    }
+
+    .upstox-creds summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    .redirect-uri-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap
+    }
+
+    .redirect-uri-row code {
+      background: #111e2d;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      word-break: break-all;
+      flex: 1 1 auto
+    }
+
+    .upstox-connect-row {
+      margin-top: 12px
+    }
+
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 12px
+    }
+  </style>
+
+  <!-- Execution Mode -->
+  <div class="card">
+    <h2>Trading Mode</h2>
+    <div class="mode-toggle">
+      <label class="mode-opt">
+        <input type="radio" name="execution_mode" value="PAPER" id="mode-paper" />
+        <span class="mode-label paper">
+          📄 Paper Trading
+          <small>Simulates trades — no real orders sent. Virtual P&amp;L only. Recommended for testing.</small>
+        </span>
+      </label>
+      <label class="mode-opt">
+        <input type="radio" name="execution_mode" value="SEMI_AUTO" id="mode-semi" />
+        <span class="mode-label semi">
+          ⏳ Semi Auto
+          <small>Requires your approval before every trade. You review and approve/reject from dashboard or Telegram
+            within a timeout window.</small>
+        </span>
+      </label>
+      <label class="mode-opt">
+        <input type="radio" name="execution_mode" value="AUTO" id="mode-auto" />
+        <span class="mode-label auto">
+          🤖 Fully Automatic
+          <small>Live orders placed automatically. Requires daily risk disclosure acceptance. Real money at
+            risk.</small>
+        </span>
+      </label>
+    </div>
+    <div id="auto-warning" class="warn" style="display:none">
+      ⚠️ <b>Fully Automatic mode places real orders without per-trade confirmation.</b>
+      Daily Risk Disclosure must be accepted before auto-trading starts each trading day.
+    </div>
+    <button onclick="saveExecutionMode()" class="btn-primary" style="margin-top:12px">Save Mode</button>
+    <div id="mode-msg" class="msg"></div>
+  </div>
+
+  <!-- Daily Risk Disclosure (Fully Automatic only) -->
+  <div class="card" id="risk-disclosure-card" style="display:none">
+    <h2>📋 Daily Risk Disclosure &amp; Authorization</h2>
+    <p class="muted" style="margin:-4px 0 14px;font-size:12.5px">
+      Required every trading day before Fully Automatic trading can start.
+      Authorization is valid only for the current trading session.
+    </p>
+
+    <div id="disclosure-status" class="upstox-status ok" style="display:none">
+      <span>✅ Daily authorization accepted for today</span>
+    </div>
+
+    <div id="disclosure-form">
+      <div class="disclosure-box">
+        <h3 style="font-size:14px;margin:0 0 10px;color:var(--amber,#f59e0b)">⚠️ RISK DISCLOSURE</h3>
+        <div class="disclosure-text" id="disclosure-text">
+          <p><b>This system places live trades automatically on your behalf.</b></p>
+          <p>By enabling Fully Automatic trading, you acknowledge and accept the following:</p>
+          <ul>
+            <li>Real money from your linked broker account will be used for trading.</li>
+            <li>Trading in options and derivatives involves <b>substantial financial risk</b>.</li>
+            <li>Losses may be partial or total, including the possibility of <b>losing your entire investment</b>.</li>
+            <li><b>Profit is never guaranteed.</b> Past performance does not guarantee future results.</li>
+            <li>Internet failures, exchange failures, broker failures, and software failures may occur, which could
+              result in delayed execution or unexecuted orders.</li>
+            <li>You remain <b>fully responsible</b> for monitoring your account and maintaining sufficient margin at all
+              times.</li>
+            <li>By continuing, you authorize this platform to execute live trades automatically for the current trading
+              session.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="consent-checks">
+        <label class="consent-label">
+          <input type="checkbox" id="consent-read" onchange="updateConsentButton()" />
+          <span>☐ I have read and understood the Risk Disclosure.</span>
+        </label>
+        <label class="consent-label">
+          <input type="checkbox" id="consent-authorize" onchange="updateConsentButton()" />
+          <span>☐ I authorize this system to execute live trades automatically for today's trading session.</span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button id="btn-accept-disclosure" class="btn-primary" disabled onclick="acceptDisclosure()">
+          ✅ Accept &amp; Continue
+        </button>
+        <button class="btn-secondary" onclick="declineDisclosure()">
+          ❌ Cancel
+        </button>
+      </div>
+      <div id="disclosure-msg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- Compliance / Authorization History -->
+  <div class="card" id="compliance-card" style="display:none">
+    <div class="card-head">
+      <span class="card-title">🔒 Compliance — Authorization History</span>
+    </div>
+    <div id="consent-history-body">
+      <p class="muted">Loading consent history…</p>
+    </div>
+    <button onclick="loadConsentHistory()" class="btn-secondary" style="margin-top:8px">Refresh</button>
+  </div>
+
+  <!-- Bot Config -->
+  <div class="card">
+    <h2>Bot Configuration</h2>
+    <div class="form-grid">
+      <label>Underlying Symbol
+        <select id="c-symbol" class="inp">
+          <option value="NIFTY">NIFTY</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+          <option value="MIDCPNIFTY">MIDCPNIFTY</option>
+        </select>
+      </label>
+      <label>Strategy
+        <select id="c-strategy" class="inp">
+          <option value="both">All Strategies</option>
+          <option value="pullback">Pullback only</option>
+          <option value="breakout">Breakout only</option>
+          <option value="liquidity">Liquidity Sweep only</option>
+        </select>
+      </label>
+      <label>Number of Lots
+        <input id="c-qty" type="number" class="inp" placeholder="1" min="1" />
+        <span class="muted" style="font-size:11.5px;display:block;margin-top:3px">
+          Each lot = the exchange-defined lot size for that symbol.<br>
+          1 lot → NIFTY 75 qty · BANKNIFTY 15 qty · FINNIFTY 40 qty · SENSEX 10 qty
+        </span>
+      </label>
+      <label>ITM Depth (1 = 1 strike ITM)
+        <input id="c-itm" type="number" class="inp" min="1" max="5" />
+      </label>
+      <label>Trail Mode
+        <select id="c-trail" class="inp">
+          <option value="atr">ATR (recommended)</option>
+          <option value="swing">Swing Low</option>
+          <option value="ema">EMA</option>
+        </select>
+      </label>
+      <label>Target R:R
+        <input id="c-rr" type="number" step="0.1" class="inp" />
+      </label>
+      <label>SL % (0.003 = 0.3%)
+        <input id="c-sl" type="number" step="0.001" class="inp" />
+      </label>
+    </div>
+
+    <!-- Lot size overrides — ADMIN ONLY -->
+    <details id="custom-lots-section" style="display:none;margin-top:12px">
+      <summary style="font-size:13px;color:var(--amber,#f59e0b);cursor:pointer;font-weight:600">
+        🔒 Custom Lot Sizes — Admin Only
+      </summary>
+      <p class="muted" style="font-size:12px;margin:8px 0 6px">
+        Override built-in lot sizes for any symbol. Only admins can set this.
+        Changes apply to ALL users on this deployment.<br>
+        Format: <code style="font-size:11px">{"NIFTY":75,"BANKNIFTY":30,"FINNIFTY":40}</code>
+      </p>
+      <textarea id="c-custom-lots" class="inp" rows="2" placeholder='{"NIFTY":75,"BANKNIFTY":15}'></textarea>
+      <div id="lots-validate-msg" style="font-size:12px;margin-top:4px"></div>
+    </details>
+
+    <button onclick="saveConfig()" class="btn-primary" style="margin-top:14px">Save Configuration</button>
+    <div id="cfg-msg" class="msg"></div>
+  </div>
+
+  <!-- Lot Size Reference -->
+  <div class="card">
+    <h2>Lot Size Reference</h2>
+    <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+      Built-in defaults (per SEBI circular). Set "Number of Lots" above and the engine
+      multiplies by the correct lot size automatically. Update "Custom Lot Sizes" above
+      when SEBI revises these.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">
+      <div class="lot-row"><span class="lot-sym">NIFTY</span><span class="lot-val">75</span></div>
+      <div class="lot-row"><span class="lot-sym">BANKNIFTY</span><span class="lot-val">15</span></div>
+      <div class="lot-row"><span class="lot-sym">FINNIFTY</span><span class="lot-val">40</span></div>
+      <div class="lot-row"><span class="lot-sym">MIDCPNIFTY</span><span class="lot-val">75</span></div>
+      <div class="lot-row"><span class="lot-sym">NIFTYNXT50</span><span class="lot-val">25</span></div>
+      <div class="lot-row"><span class="lot-sym">SENSEX</span><span class="lot-val">10</span></div>
+      <div class="lot-row"><span class="lot-sym">BANKEX</span><span class="lot-val">15</span></div>
+    </div>
+    <p class="muted" style="font-size:11.5px;margin-top:10px">
+      ⚠️ Exchange lot sizes change quarterly — always verify at
+      <a href="https://nseindia.com" target="_blank" rel="noopener" style="color:var(--blue)">nseindia.com</a>
+      before going live.
+    </p>
+  </div>
+
+  <style>
+    .lot-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card2, #1a2235);
+      padding: 7px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .lot-sym {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .lot-val {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--green);
+      font-weight: 700;
+    }
+  </style>
+
+  <!-- Risk Limits -->
+  <div class="card">
+    <h2>Risk Limits</h2>
+    <p class="muted" style="margin:-4px 0 14px;font-size:12.5px">
+      Applied account-wide — across all symbols this bot trades, not per symbol.
+    </p>
+    <div class="form-grid">
+      <label>Max Trades Per Day
+        <input id="r-maxtrades" type="number" class="inp" />
+      </label>
+      <label>Max Net Loss Per Day (₹)
+        <input id="r-maxloss" type="number" class="inp" />
+        <span class="muted" style="font-size:11.5px;display:block;margin-top:3px">
+          Stops new entries once today's NET P&amp;L (wins minus losses) reaches −₹this amount.
+          Open positions are not force-closed — they continue to their own SL/target.
+        </span>
+      </label>
+      <label>Trade Start Time (IST)
+        <input id="r-start" type="time" class="inp" />
+      </label>
+      <label>Trade End Time (IST)
+        <input id="r-end" type="time" class="inp" />
+      </label>
+    </div>
+    <button onclick="saveRisk()" class="btn-primary">Save Risk Limits</button>
+    <div id="risk-msg" class="msg"></div>
+  </div>
+
+<!-- Additional Symbols — Dynamic Card UI -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Additional Symbols</span>
+      <div style="display:flex;gap:8px">
+        <button onclick="addSymbolCard()" class="btn-secondary">+ Add Symbol</button>
+        <button onclick="loadMultiSymbol()" class="btn-secondary">↻ Refresh</button>
+      </div>
+    </div>
+    <p class="muted" style="margin:-4px 0 12px">
+      Add symbols to trade alongside the main symbol above. Each symbol runs its own independent engine
+      with its own lot configuration. The Symbol Token is automatically detected — no manual entry needed.
+    </p>
+
+    <div id="extra-symbols-cards" class="symbol-cards-wrap">
+      <!-- Dynamic cards inserted here by JS -->
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button onclick="saveMultiSymbol()" class="btn-primary">Save Multi-Symbol Config</button>
+    </div>
+    <div id="ms-msg" class="msg"></div>
+  </div>
+
+  <!-- Telegram Alerts -->
+  <div class="card">
+    <h2>Telegram Alerts <span class="tag tag-win">NEW</span></h2>
+    <p class="muted">Get trade alerts directly in Telegram.<br>
+      1. Create a bot via <b>@BotFather</b> → get token<br>
+      2. Start the bot → send any message<br>
+      3. Get your Chat ID: <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code></p>
+    <div class="form-grid">
+      <label>Bot Token (from @BotFather)
+        <input id="tg-token" class="inp" placeholder="123456:ABC-DEF..." />
+      </label>
+      <label>Chat ID
+        <input id="tg-chat" class="inp" placeholder="123456789" />
+      </label>
+    </div>
+    <div style="margin:12px 0; display:flex; gap:12px; flex-wrap:wrap">
+      <label class="chk-label"><input type="checkbox" id="tg-entry"> Entry alerts</label>
+      <label class="chk-label"><input type="checkbox" id="tg-exit"> Exit alerts</label>
+      <label class="chk-label"><input type="checkbox" id="tg-trail"> SL trail alerts</label>
+      <label class="chk-label"><input type="checkbox" id="tg-summary"> Daily summary</label>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:4px">
+      <button onclick="saveTelegram()" class="btn-primary" style="flex:1">Save Telegram Settings</button>
+      <button onclick="testTelegram()" class="btn-test">📨 Send Test</button>
+    </div>
+    <div id="tg-msg" class="msg"></div>
+  </div>
+
+</div><!-- end page-wrap -->
+
+<style>
+  .mode-toggle {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .mode-opt {
+    flex: 1;
+    min-width: 200px;
+    cursor: pointer;
+  }
+
+  .mode-opt input[type=radio] {
+    display: none;
+  }
+
+  .mode-label {
+    display: block;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: all .2s;
+  }
+
+  .mode-opt input:checked+.mode-label.paper {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, .08);
+  }
+
+  .mode-opt input:checked+.mode-label.live {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, .08);
+  }
+
+  .mode-label small {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-weight: 400;
+  }
+
+  .warn {
+    background: rgba(245, 158, 11, .12);
+    border: 1px solid #f59e0b;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #f59e0b;
+    margin-top: 8px;
+  }
+
+  .chk-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .chk-label input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--green);
+  }
+
+  .btn-test {
+    padding: 11px 18px;
+    background: rgba(59, 130, 246, .15);
+    color: var(--blue);
+    border: 1px solid var(--blue);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-test:hover {
+    background: rgba(59, 130, 246, .25);
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+
+  .tag-win {
+    background: #EAF3DE;
+    color: #3B6D11;
+  }
+
+  /* ── Disclosure / Compliance ── */
+  .disclosure-box {
+    background: var(--card2, #1a2235);
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 12px 0
+  }
+
+  .disclosure-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text)
+  }
+
+  .disclosure-text ul {
+    margin: 6px 0;
+    padding-left: 20px
+  }
+
+  .disclosure-text li {
+    margin-bottom: 6px
+  }
+
+  .consent-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 16px 0
+  }
+
+  .consent-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+    line-height: 1.5
+  }
+
+  .consent-label input {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--green);
+    flex-shrink: 0
+  }
+
+  .mode-opt input:checked+.mode-label.semi {
+    border-color: #8b5cf6;
+    background: rgba(139, 92, 246, .08)
+  }
+
+  .mode-opt input:checked+.mode-label.auto {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, .08)
+  }
+
+  /* ── Additional Symbol Cards ── */
+  .symbol-cards-wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+
+  .symbol-card {
+    background: var(--card2, #1a2235);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .25);
+    transition: border-color .2s, box-shadow .2s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .symbol-card:hover {
+    border-color: rgba(59, 130, 246, .25);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .35);
+  }
+
+  .symbol-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(31, 45, 69, .6);
+  }
+
+  .symbol-card-header .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .symbol-card-header .toggle-wrap input[type=checkbox] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--green);
+    cursor: pointer;
+  }
+
+  .symbol-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .symbol-card-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .symbol-card-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .symbol-card-field label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .symbol-card-field .inp-sm {
+    padding: 7px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+    width: 100%;
+  }
+
+  .symbol-card-field .inp-sm:focus {
+    border-color: var(--blue);
+  }
+
+  .symbol-card-field .inp-sm:read-only,
+  .symbol-card-field .inp-sm[readonly] {
+    opacity: .65;
+    cursor: default;
+  }
+
+  .symbol-card-field .val-readonly {
+    padding: 7px 10px;
+    background: rgba(0, 0, 0, .15);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    opacity: .8;
+  }
+
+  .symbol-card-field .val-readonly.green {
+    color: var(--green);
+  }
+
+  .symbol-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(31, 45, 69, .6);
+  }
+
+  .symbol-card-msg {
+    font-size: 11.5px;
+    color: var(--red);
+    min-height: 0;
+    display: none;
+  }
+
+  .symbol-card-msg.show {
+    display: block;
+  }
+
+  .symbol-card select.inp-sm {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L2 5h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+
+  @media(max-width: 768px) {
+    .symbol-cards-wrap {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  async function loadConfig() {
+    const r = await apiFetch('/api/users/config');
+    if (!r || !r.ok) return;
+    const c = await r.json();
+
+    document.getElementById('c-symbol').value = c.underlying_symbol || 'NIFTY';
+    document.getElementById('c-strategy').value = c.strategy || 'both';
+    document.getElementById('c-qty').value = c.order_qty;
+    document.getElementById('c-custom-lots').value = c.custom_lot_sizes || '';
+
+    // Show custom lot sizes section only for admins
+    const isAdmin = localStorage.getItem('role') === 'admin';
+    const lotsSection = document.getElementById('custom-lots-section');
+    if (lotsSection) lotsSection.style.display = isAdmin ? '' : 'none';
+    document.getElementById('c-itm').value = c.itm_depth;
+    document.getElementById('c-trail').value = c.trail_mode || 'atr';
+    document.getElementById('c-rr').value = c.target_rr;
+    document.getElementById('c-sl').value = c.sl_pct;
+    document.getElementById('r-maxtrades').value = c.max_trades_per_day;
+    document.getElementById('r-maxloss').value = c.max_loss_per_day;
+    document.getElementById('r-start').value = c.trade_start_time || '09:20';
+    document.getElementById('r-end').value = c.trade_end_time || '15:00';
+
+    // Execution mode (PAPER / SEMI_AUTO / AUTO)
+    const execMode = c.execution_mode || (c.paper_mode !== false ? 'PAPER' : 'AUTO');
+    if (execMode === 'PAPER') {
+      document.getElementById('mode-paper').checked = true;
+    } else if (execMode === 'SEMI_AUTO') {
+      document.getElementById('mode-semi').checked = true;
+    } else {
+      document.getElementById('mode-auto').checked = true;
+    }
+
+    document.getElementById('auto-warning').style.display = (execMode === 'AUTO') ? 'block' : 'none';
+
+    // Show/hide risk disclosure and compliance cards
+    const disclosureCard = document.getElementById('risk-disclosure-card');
+    if (disclosureCard) disclosureCard.style.display = (execMode === 'AUTO') ? '' : 'none';
+    const complianceCard = document.getElementById('compliance-card');
+    if (complianceCard) complianceCard.style.display = (execMode === 'AUTO') ? '' : 'none';
+    if (execMode === 'AUTO') {
+      loadDisclosureStatus();
+      loadConsentHistory();
+    }
+
+    // Telegram
+    document.getElementById('tg-token').value = c.telegram_bot_token || '';
+    document.getElementById('tg-chat').value = c.telegram_chat_id || '';
+    document.getElementById('tg-entry').checked = c.telegram_on_entry !== false;
+    document.getElementById('tg-exit').checked = c.telegram_on_exit !== false;
+    document.getElementById('tg-trail').checked = c.telegram_on_trail || false;
+    document.getElementById('tg-summary').checked = c.telegram_on_summary !== false;
+
+    // Multi-symbol is loaded separately via loadMultiSymbol()
+  }
+
+  // Toggle warning when live selected
+  document.querySelectorAll('input[name=trade_mode]').forEach(r =>
+    r.addEventListener('change', () => {
+      document.getElementById('live-warning').style.display =
+        document.getElementById('mode-live').checked ? 'block' : 'none';
+    })
+  );
+
+  async function saveToken() {
+    const token = document.getElementById('upstox-token').value.trim();
+    if (!token) { showMsg('token-msg', 'Token cannot be empty', 'error'); return; }
+    const r = await apiFetch('/api/users/upstox-token',
+      { method: 'POST', body: JSON.stringify({ token }) });
+    showMsg('token-msg', r?.ok ? '✅ Token saved securely' : '❌ Failed', r?.ok ? 'success' : 'error');
+    if (r?.ok) loadUpstoxStatus();
+  }
+
+  // ── Upstox OAuth connect/refresh ──────────────────────────────────
+
+  async function loadUpstoxStatus() {
+    const r = await apiFetch('/api/users/upstox/status');
+    if (!r || !r.ok) return;
+    const s = await r.json();
+
+    document.getElementById('redirect-uri').textContent = s.redirect_uri || '–';
+
+    const box = document.getElementById('upstox-status-box');
+    const text = document.getElementById('upstox-status-text');
+    const btn = document.getElementById('btn-upstox-connect');
+
+    box.classList.remove('ok', 'warn', 'err');
+
+    if (!s.has_credentials) {
+      box.classList.add('warn');
+      text.textContent = '⚠️ Upstox API Key/Secret not configured — open "API Key & Secret" below to set up.';
+      btn.textContent = 'Connect to Upstox';
+      btn.disabled = false;
+      document.getElementById('upstox-creds-box').open = true;
+      return;
+    }
+
+    if (s.has_token && s.token_valid) {
+      box.classList.add('ok');
+      const exp = s.expires_at ? new Date(s.expires_at).toLocaleString() : 'unknown';
+      text.textContent = `✅ Connected — token valid until ${exp}`;
+      btn.textContent = 'Refresh Token';
+    } else if (s.has_token && !s.token_valid) {
+      box.classList.add('warn');
+      text.textContent = '⚠️ Token expired — click Refresh Token before starting the bot.';
+      btn.textContent = 'Refresh Token';
+    } else {
+      box.classList.add('warn');
+      text.textContent = 'Not connected yet — click Connect to Upstox.';
+      btn.textContent = 'Connect to Upstox';
+    }
+    btn.disabled = false;
+  }
+
+  async function saveUpstoxCredentials() {
+    const api_key = document.getElementById('upstox-api-key').value.trim();
+    const api_secret = document.getElementById('upstox-api-secret').value.trim();
+    if (!api_key || !api_secret) {
+      showMsg('creds-msg', 'API Key and Secret are both required', 'error');
+      return;
+    }
+    const r = await apiFetch('/api/users/upstox/credentials',
+      { method: 'POST', body: JSON.stringify({ api_key, api_secret }) });
+    if (r?.ok) {
+      showMsg('creds-msg', '✅ Credentials saved', 'success');
+      document.getElementById('upstox-api-secret').value = '';
+      loadUpstoxStatus();
+    } else {
+      const err = await r?.json().catch(() => null);
+      showMsg('creds-msg', '❌ ' + (err?.detail || 'Failed to save'), 'error');
+    }
+  }
+
+  async function connectUpstox() {
+    const btn = document.getElementById('btn-upstox-connect');
+    btn.disabled = true;
+    const r = await apiFetch('/api/users/upstox/login-url');
+    if (!r || !r.ok) {
+      const err = await r?.json().catch(() => null);
+      showMsg('upstox-msg', '❌ ' + (err?.detail || 'Failed to start login'), 'error');
+      btn.disabled = false;
+      return;
+    }
+    const { url } = await r.json();
+    // Full-page redirect — Upstox's login page cannot be used inside an iframe/popup reliably
+    window.location.href = url;
+  }
+
+  function copyRedirectUri() {
+    const txt = document.getElementById('redirect-uri').textContent;
+    navigator.clipboard?.writeText(txt);
+    showMsg('creds-msg', '📋 Copied to clipboard', 'success');
+  }
+
+  // Show result message after returning from Upstox OAuth redirect
+  function handleUpstoxCallbackParams() {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('upstox');
+    if (!status) return;
+    const msg = params.get('msg');
+    if (status === 'connected') {
+      showMsg('upstox-msg', '✅ Upstox connected — token refreshed', 'success');
+    } else if (status === 'error') {
+      showMsg('upstox-msg', '❌ ' + (msg || 'Upstox connection failed'), 'error');
+    }
+    // Clean the query string so refresh doesn't re-show the message
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+
+  async function loadAccountStatus() {
+    const r = await apiFetch('/api/auth/me');
+    if (!r || !r.ok) return;
+    const u = await r.json();
+    const box = document.getElementById('account-status-body');
+
+    const verifiedBadge = u.email_verified
+      ? '<span style="color:var(--green)">✅ Email verified</span>'
+      : '<span style="color:var(--yellow)">⚠️ Email NOT verified — bot locked until verified</span>';
+
+    const googleBadge = u.has_google
+      ? '<span style="color:var(--blue);margin-left:12px">🔗 Google account linked</span>'
+      : '';
+
+    const avatarHtml = u.avatar_url
+      ? `<img src="${u.avatar_url}" style="width:36px;height:36px;border-radius:50%;margin-right:10px;vertical-align:middle" alt=""/>`
+      : '';
+
+    let resendHtml = '';
+    if (!u.email_verified) {
+      resendHtml = `
+    <div style="margin-top:12px">
+      <button onclick="resendVerify('${u.email}')" class="btn-secondary">
+        📧 Resend Verification Email
+      </button>
+      <div id="resend-msg" class="msg" style="margin-top:8px"></div>
+    </div>`;
+    }
+
+    box.innerHTML = `
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      ${avatarHtml}
+      <div>
+        <div style="font-weight:600;color:var(--text)">${u.full_name || '—'}</div>
+        <div style="font-size:12px">${u.email}</div>
+      </div>
+    </div>
+    ${verifiedBadge}${googleBadge}
+    ${resendHtml}`;
+  }
+
+  async function resendVerify(email) {
+    const r = await apiFetch('/api/auth/resend-verify', {
+      method: 'POST', body: JSON.stringify({ email })
+    });
+    const msg = document.getElementById('resend-msg');
+    if (r && r.ok) {
+      msg.textContent = '✅ Verification email sent — check your inbox (and spam folder)';
+      msg.className = 'msg success';
+    } else {
+      const d = await r?.json().catch(() => null);
+      msg.textContent = '❌ ' + (d?.detail || 'Failed to resend');
+      msg.className = 'msg error';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
+    loadUpstoxStatus();
+    handleUpstoxCallbackParams();
+    loadAccountStatus();
+    loadMultiSymbol();
+  });
+
+  async function saveExecutionMode() {
+    let execMode = 'PAPER';
+    if (document.getElementById('mode-semi').checked) execMode = 'SEMI_AUTO';
+    else if (document.getElementById('mode-auto').checked) execMode = 'AUTO';
+
+    const r = await apiFetch('/api/users/config',
+      {
+        method: 'PATCH', body: JSON.stringify({
+          execution_mode: execMode,
+          paper_mode: execMode === 'PAPER',
+        })
+      });
+    if (r?.ok) {
+      const label = execMode === 'PAPER' ? '📄 Paper Trading'
+        : execMode === 'SEMI_AUTO' ? '⏳ Semi Auto'
+          : '🤖 Fully Automatic';
+      showMsg('mode-msg', `✅ Mode changed to ${label}`, 'success');
+      document.getElementById('auto-warning').style.display = (execMode === 'AUTO') ? 'block' : 'none';
+      const dc = document.getElementById('risk-disclosure-card');
+      if (dc) dc.style.display = (execMode === 'AUTO') ? '' : 'none';
+      const cc = document.getElementById('compliance-card');
+      if (cc) cc.style.display = (execMode === 'AUTO') ? '' : 'none';
+      if (execMode === 'AUTO') {
+        loadDisclosureStatus();
+        loadConsentHistory();
+      }
+    } else {
+      showMsg('mode-msg', '❌ Failed to save mode', 'error');
+    }
+  }
+
+  // ── Daily Risk Disclosure ──────────────────────────────────────
+  async function loadDisclosureStatus() {
+    try {
+      const r = await apiFetch('/api/users/daily-auto-consent');
+      if (!r || !r.ok) return;
+      const d = await r.json();
+      const statusEl = document.getElementById('disclosure-status');
+      const formEl = document.getElementById('disclosure-form');
+      if (d.accepted) {
+        if (statusEl) statusEl.style.display = 'flex';
+        if (formEl) formEl.style.display = 'none';
+      } else {
+        if (statusEl) statusEl.style.display = 'none';
+        if (formEl) formEl.style.display = 'block';
+      }
+    } catch (e) {
+      console.error('loadDisclosureStatus:', e);
+    }
+  }
+
+  function updateConsentButton() {
+    const read = document.getElementById('consent-read').checked;
+    const auth = document.getElementById('consent-authorize').checked;
+    const btn = document.getElementById('btn-accept-disclosure');
+    if (btn) btn.disabled = !(read && auth);
+  }
+
+  async function acceptDisclosure() {
+    const read = document.getElementById('consent-read').checked;
+    const auth = document.getElementById('consent-authorize').checked;
+    if (!read || !auth) {
+      showMsg('disclosure-msg', 'Both checkboxes must be checked', 'error');
+      return;
+    }
+    const r = await apiFetch('/api/users/daily-auto-consent', {
+      method: 'POST',
+      body: JSON.stringify({
+        accepted: true,
+        risk_version: 'v1.0',
+        risk_text_snapshot: document.getElementById('disclosure-text')?.innerText || '',
+        browser_information: navigator.userAgent || '',
+      }),
+    });
+    if (r?.ok) {
+      showMsg('disclosure-msg', '✅ Daily authorization accepted for today', 'success');
+      const statusEl = document.getElementById('disclosure-status');
+      const formEl = document.getElementById('disclosure-form');
+      if (statusEl) statusEl.style.display = 'flex';
+      if (formEl) formEl.style.display = 'none';
+      // Reset checkboxes
+      document.getElementById('consent-read').checked = false;
+      document.getElementById('consent-authorize').checked = false;
+      updateConsentButton();
+    } else {
+      const err = await r?.json().catch(() => ({}));
+      showMsg('disclosure-msg', '❌ ' + (err.detail || 'Failed to accept'), 'error');
+    }
+  }
+
+  async function declineDisclosure() {
+    showMsg('disclosure-msg', 'Daily authorization declined. Auto trading will not start.', '');
+  }
+
+  // ── Consent History ────────────────────────────────────────────
+  async function loadConsentHistory() {
+    const body = document.getElementById('consent-history-body');
+    if (!body) return;
+    try {
+      // Fetch consent records from the user-level API (not admin)
+      const r = await apiFetch('/api/users/consent-history');
+      if (!r || !r.ok) {
+        body.innerHTML = '<p class="muted">Consent history not available.</p>';
+        return;
+      }
+      const records = await r.json();
+      if (!records.length) {
+        body.innerHTML = '<p class="muted">No authorization records found.</p>';
+        return;
+      }
+      body.innerHTML = `<table class="data-table" style="font-size:12px">
+      <thead><tr>
+        <th>Date</th><th>Time</th><th>Status</th><th>Risk Version</th>
+      </tr></thead>
+      <tbody>${records.map(r => `
+        <tr>
+          <td>${r.created_at?.slice(0, 10) || '—'}</td>
+          <td>${r.created_at?.slice(11, 19) || '—'}</td>
+          <td>${r.accepted ? '<span style="color:var(--green)">✅ Accepted</span>' : '<span style="color:var(--red)">❌ Declined</span>'}</td>
+          <td>${r.risk_version || '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+    } catch (e) {
+      body.innerHTML = '<p class="muted">Could not load consent history.</p>';
+    }
+  }
+
+  async function saveConfig() {
+    let body;
+    try {
+      body = {
+        underlying_symbol: document.getElementById('c-symbol').value,
+        strategy: document.getElementById('c-strategy').value,
+        order_qty: parseInt(document.getElementById('c-qty').value) || 1,
+        custom_lot_sizes: (() => {
+          const el = document.getElementById('c-custom-lots');
+          const section = document.getElementById('custom-lots-section');
+          // Non-admins: section is hidden, return undefined so it's excluded from save
+          if (!el || !section || section.style.display === 'none') return undefined;
+          const raw = (el.value || '').trim();
+          const msgEl = document.getElementById('lots-validate-msg');
+          if (!raw) { if (msgEl) msgEl.textContent = ''; return ''; }
+          try {
+            const parsed = JSON.parse(raw);
+            if (typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Must be an object');
+            if (msgEl) { msgEl.textContent = '\u2705 Valid JSON'; msgEl.style.color = 'var(--green)'; }
+            return raw;
+          } catch (e) {
+            if (msgEl) { msgEl.textContent = '\u274c Invalid JSON: ' + e.message; msgEl.style.color = 'var(--red)'; }
+            throw new Error('Fix custom lot sizes JSON before saving');
+          }
+        })(),
+        itm_depth: parseInt(document.getElementById('c-itm').value),
+        trail_mode: document.getElementById('c-trail').value,
+        target_rr: parseFloat(document.getElementById('c-rr').value),
+        sl_pct: parseFloat(document.getElementById('c-sl').value),
+      };
+    } catch (e) {
+      showMsg('cfg-msg', '❌ ' + e.message, 'error');
+      return;
+    }
+    const r = await apiFetch('/api/users/config', { method: 'PATCH', body: JSON.stringify(body) });
+    showMsg('cfg-msg', r?.ok ? '✅ Configuration saved' : '❌ Failed', r?.ok ? 'success' : 'error');
+  }
+
+  async function saveRisk() {
+    const body = {
+      max_trades_per_day: parseInt(document.getElementById('r-maxtrades').value) || 5,
+      max_loss_per_day: parseFloat(document.getElementById('r-maxloss').value) || 5000,
+      trade_start_time: document.getElementById('r-start').value || '09:20',
+      trade_end_time: document.getElementById('r-end').value || '15:00',
+    };
+    const r = await apiFetch('/api/users/config', { method: 'PATCH', body: JSON.stringify(body) });
+    showMsg('risk-msg', r?.ok ? '✅ Risk limits saved' : '❌ Failed', r?.ok ? 'success' : 'error');
+  }
+
+  // ── Available symbols cache (loaded once from API) ─────────────
+  let _availableSymbols = [];
+
+  async function getAvailableSymbols() {
+    if (_availableSymbols.length > 0) return _availableSymbols;
+    const r = await apiFetch('/api/users/available-symbols');
+    if (r && r.ok) {
+      _availableSymbols = await r.json();
+    }
+    return _availableSymbols;
+  }
+
+  function getSymbolInfo(symbol) {
+    return _availableSymbols.find(s => s.symbol === (symbol || '').toUpperCase()) || null;
+  }
+
+  // ── Add a new dynamic symbol card ──────────────────────────────
+  function addSymbolCard() {
+    const container = document.getElementById('extra-symbols-cards');
+    if (!container) return;
+    const card = createSymbolCard('', '', true, 1);
+    container.appendChild(card);
+    // Auto-scroll to the new card
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+  }
+
+  function createSymbolCard(symbol, streamerToken, enabled, lots) {
+    const div = document.createElement('div');
+    div.className = 'symbol-card';
+
+    // Unique ID for this card instance
+    const uid = 'sc_' + Math.random().toString(36).substr(2, 9);
+
+    const lotSize = streamerToken ? (getSymbolInfo(symbol)?.lot_size || 1) : 1;
+    const qty = lots * lotSize;
+
+    div.innerHTML = `
+      <div class="symbol-card-header">
+        <div class="toggle-wrap">
+          <input type="checkbox" class="sc-enabled" id="${uid}-enabled" ${enabled !== false ? 'checked' : ''} />
+          <label for="${uid}-enabled">${enabled !== false ? 'Enabled' : 'Disabled'}</label>
+        </div>
+        <span class="symbol-card-idx muted" style="font-size:11px">#</span>
+      </div>
+
+      <div class="symbol-card-body">
+        <div class="symbol-card-field">
+          <label>Trading Symbol</label>
+          <select class="sc-symbol inp-sm" id="${uid}-symbol">
+            <option value="">— Select Symbol —</option>
+          </select>
+          <div class="field-error" id="${uid}-sym-err"></div>
+        </div>
+
+        <div class="symbol-card-row">
+          <div class="symbol-card-field">
+            <label>Lots</label>
+            <input type="number" class="sc-lots inp-sm" id="${uid}-lots" value="${lots || 1}" min="1" />
+            <div class="field-error" id="${uid}-lots-err"></div>
+          </div>
+          <div class="symbol-card-field">
+            <label>Exchange Lot Size</label>
+            <div class="val-readonly sc-lot-size" id="${uid}-lot-size">${lotSize}</div>
+          </div>
+        </div>
+
+        <div class="symbol-card-row">
+          <div class="symbol-card-field">
+            <label>Calculated Quantity</label>
+            <div class="val-readonly green sc-qty" id="${uid}-qty">${qty}</div>
+          </div>
+          <div class="symbol-card-field">
+            <label>Symbol Token <span class="muted" style="font-weight:400;text-transform:none">(auto)</span></label>
+            <div class="val-readonly sc-token" id="${uid}-token" style="font-size:11px;font-family:monospace">${streamerToken || '— auto —'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="symbol-card-actions">
+        <button onclick="removeSymbolCard(this)" class="btn-secondary" style="color:var(--red);border-color:var(--red);flex:1">
+          🗑 Remove Card
+        </button>
+      </div>
+      <div class="symbol-card-msg" id="${uid}-msg"></div>
+    `;
+
+    // ── Populate symbol dropdown ─────────────────────────────────
+    const sel = div.querySelector('.sc-symbol');
+    const syms = _availableSymbols.map(s => s.symbol);
+    syms.forEach(sym => {
+      const opt = document.createElement('option');
+      opt.value = sym;
+      opt.textContent = sym;
+      if (sym === symbol) opt.selected = true;
+      sel.appendChild(opt);
+    });
+
+    // ── Update card index ─────────────────────────────────────────
+    const idxSpan = div.querySelector('.symbol-card-idx');
+    const updateIdx = () => {
+      const container = document.getElementById('extra-symbols-cards');
+      if (container) {
+        const cards = container.querySelectorAll('.symbol-card');
+        const idx = Array.from(cards).indexOf(div);
+        idxSpan.textContent = `#${idx + 1}`;
+      }
+    };
+    updateIdx();
+
+    // ── Symbol change handler ────────────────────────────────────
+    sel.addEventListener('change', () => {
+      const selectedSym = sel.value;
+      const info = getSymbolInfo(selectedSym);
+      const tokenEl = div.querySelector('.sc-token');
+      const lsEl = div.querySelector('.sc-lot-size');
+      const lotsInput = div.querySelector('.sc-lots');
+      const qtyEl = div.querySelector('.sc-qty');
+      const errEl = div.querySelector(`#${uid}-sym-err`);
+
+      if (selectedSym && info) {
+        tokenEl.textContent = info.streamer_token || '—';
+        lsEl.textContent = info.lot_size;
+        tokenEl.style.color = '';
+        // Recalculate quantity
+        const lots = parseInt(lotsInput.value) || 1;
+        qtyEl.textContent = lots * info.lot_size;
+        // Clear error
+        errEl.textContent = '';
+        errEl.classList.remove('show');
+      } else if (selectedSym) {
+        tokenEl.textContent = '⚠️ Unknown symbol';
+        tokenEl.style.color = 'var(--red)';
+        lsEl.textContent = '—';
+        qtyEl.textContent = '—';
+      } else {
+        tokenEl.textContent = '— auto —';
+        tokenEl.style.color = '';
+        lsEl.textContent = '—';
+        qtyEl.textContent = '—';
+      }
+
+      // Validate duplicates
+      validateDuplicateSymbols(sel);
+      updateIdx();
+    });
+
+    // ── Lots change handler ───────────────────────────────────────
+    const lotsInput = div.querySelector('.sc-lots');
+    lotsInput.addEventListener('input', () => {
+      const val = parseInt(lotsInput.value);
+      const lsEl = div.querySelector('.sc-lot-size');
+      const qtyEl = div.querySelector('.sc-qty');
+      const errEl = div.querySelector(`#${uid}-lots-err`);
+      const selectedSym = sel.value;
+      const info = getSymbolInfo(selectedSym);
+
+      if (isNaN(val) || val < 1) {
+        errEl.textContent = 'Minimum 1 lot';
+        errEl.classList.add('show');
+        lotsInput.value = 1;
+        qtyEl.textContent = info ? (1 * info.lot_size) : '—';
+        return;
+      }
+
+      errEl.textContent = '';
+      errEl.classList.remove('show');
+
+      if (selectedSym && info) {
+        qtyEl.textContent = val * info.lot_size;
+      }
+    });
+
+    // ── Trigger symbol change for pre-populated cards ─────────────
+    if (symbol) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        sel.dispatchEvent(new Event('change'));
+      }, 50);
+    }
+
+    return div;
+  }
+
+  // ── Duplicate symbol validation ────────────────────────────────
+  function validateDuplicateSymbols(changedSelect) {
+    const container = document.getElementById('extra-symbols-cards');
+    if (!container) return;
+    const selects = container.querySelectorAll('.sc-symbol');
+    const values = Array.from(selects).map(s => s.value.toUpperCase());
+    const changedVal = changedSelect.value.toUpperCase();
+
+    selects.forEach(sel => {
+      const card = sel.closest('.symbol-card');
+      const errEl = card?.querySelector('.field-error');
+      if (!errEl) return;
+      const selVal = sel.value.toUpperCase();
+      if (selVal && values.filter(v => v === selVal).length > 1) {
+        if (sel === changedSelect) {
+          errEl.textContent = '⚠️ Duplicate symbol — other cards already use this';
+          errEl.classList.add('show');
+        }
+      } else if (sel.value) {
+        errEl.textContent = '';
+        errEl.classList.remove('show');
+      }
+    });
+  }
+
+  // ── Remove a symbol card ───────────────────────────────────────
+  function removeSymbolCard(btn) {
+    const card = btn.closest('.symbol-card');
+    if (!card) return;
+    if (!confirm('Remove this symbol card?')) return;
+    card.remove();
+    // Re-index remaining cards
+    const container = document.getElementById('extra-symbols-cards');
+    if (container) {
+      container.querySelectorAll('.symbol-card').forEach(c => {
+        const idxSpan = c.querySelector('.symbol-card-idx');
+        if (idxSpan) {
+          const cards = container.querySelectorAll('.symbol-card');
+          const idx = Array.from(cards).indexOf(c);
+          idxSpan.textContent = `#${idx + 1}`;
+        }
+      });
+    }
+  }
+
+  // ── Load multi-symbol config from backend ─────────────────────
+  async function loadMultiSymbol() {
+    // First ensure available symbols are loaded
+    await getAvailableSymbols();
+
+    const r = await apiFetch('/api/users/config');
+    if (!r || !r.ok) return;
+    const c = await r.json();
+
+    const container = document.getElementById('extra-symbols-cards');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Parse extra_symbol_config (per-symbol independent config)
+    let configs = [];
+    try {
+      configs = JSON.parse(c.extra_symbol_config || '[]');
+    } catch (e) {
+      configs = [];
+    }
+
+    const configBySymbol = {};
+    configs.forEach(cfg => {
+      if (cfg.symbol) configBySymbol[cfg.symbol.toUpperCase()] = cfg;
+    });
+
+    // Also parse legacy extra_symbols/extra_tokens for backward compat
+    const legacySymbols = (c.extra_symbols || '').split(',').map(s => s.trim()).filter(Boolean);
+    const legacyTokens = (c.extra_tokens || '').split(',').map(t => t.trim()).filter(Boolean);
+
+    // Merge: prefer extra_symbol_config, fall back to legacy
+    const processedSyms = new Set();
+
+    // 1. Process extra_symbol_config entries first
+    configs.forEach(cfg => {
+      const sym = (cfg.symbol || '').toUpperCase();
+      if (!sym) return;
+      processedSyms.add(sym);
+      const enabled = cfg.enabled !== false;
+      const lots = cfg.lots || 1;
+      const info = getSymbolInfo(sym);
+      const token = info ? info.streamer_token : '';
+      const card = createSymbolCard(sym, token, enabled, lots);
+      container.appendChild(card);
+    });
+
+    // 2. Process legacy entries that aren't already covered
+    for (let i = 0; i < Math.min(legacySymbols.length, legacyTokens.length); i++) {
+      const sym = legacySymbols[i].toUpperCase();
+      if (processedSyms.has(sym)) continue;
+      processedSyms.add(sym);
+      const info = getSymbolInfo(sym);
+      const token = info ? info.streamer_token : legacyTokens[i];
+      const card = createSymbolCard(sym, token, true, 1);
+      container.appendChild(card);
+    }
+
+    // If nothing to load, show a placeholder message
+    if (processedSyms.size === 0) {
+      container.innerHTML = '<div class="muted center" style="padding:20px;grid-column:1/-1">No additional symbols configured. Click <b>+ Add Symbol</b> above to get started.</div>';
+    }
+  }
+
+  // ── Save multi-symbol config ────────────────────────────────────
+  async function saveMultiSymbol() {
+    const container = document.getElementById('extra-symbols-cards');
+    if (!container) return;
+
+    const cards = container.querySelectorAll('.symbol-card');
+    if (!cards.length) {
+      // Save empty config
+      const r = await apiFetch('/api/users/config', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          extra_symbols: '',
+          extra_tokens: '',
+          extra_symbol_config: '[]',
+        })
+      });
+      if (r?.ok) {
+        showMsg('ms-msg', '✅ All additional symbols removed', 'success');
+      } else {
+        showMsg('ms-msg', '❌ Failed to save', 'error');
+      }
+      return;
+    }
+
+    // ── Validate all cards ─────────────────────────────────────
+    let valid = true;
+    const symbols = [];
+    const tokens = [];
+    const configs = [];
+
+    cards.forEach(card => {
+      const sel = card.querySelector('.sc-symbol');
+      const lotsInput = card.querySelector('.sc-lots');
+      const enabledChk = card.querySelector('.sc-enabled');
+      const msgEl = card.querySelector('.symbol-card-msg');
+
+      const symbol = (sel.value || '').trim().toUpperCase();
+      const lots = parseInt(lotsInput.value) || 1;
+      const enabled = enabledChk.checked;
+
+      // Reset card-level message
+      msgEl.classList.remove('show');
+      msgEl.textContent = '';
+
+      // Validation: symbol required
+      if (!symbol) {
+        msgEl.textContent = '⚠️ Please select a Trading Symbol';
+        msgEl.classList.add('show');
+        valid = false;
+        return;
+      }
+
+      // Validation: lots must be positive integer
+      if (lots < 1 || isNaN(lots)) {
+        msgEl.textContent = '⚠️ Lots must be at least 1';
+        msgEl.classList.add('show');
+        valid = false;
+        return;
+      }
+
+      // Validation: duplicate symbols across cards
+      if (symbols.includes(symbol)) {
+        msgEl.textContent = `⚠️ Duplicate symbol "${symbol}" — each symbol can only appear once`;
+        msgEl.classList.add('show');
+        valid = false;
+        return;
+      }
+
+      // Look up token from available symbols
+      const info = getSymbolInfo(symbol);
+      const token = info ? info.streamer_token : '';
+
+      if (!token) {
+        msgEl.textContent = `⚠️ No streamer token found for "${symbol}"`;
+        msgEl.classList.add('show');
+        valid = false;
+        return;
+      }
+
+      symbols.push(symbol);
+      tokens.push(token);
+      configs.push({
+        symbol: symbol,
+        enabled: enabled,
+        lots: lots,
+      });
+    });
+
+    if (!valid) {
+      showMsg('ms-msg', '❌ Please fix validation errors and try again', 'error');
+      return;
+    }
+
+    // ── Save to backend ──────────────────────────────────────────
+    const body = {
+      extra_symbols: symbols.join(','),
+      extra_tokens: tokens.join(','),
+      extra_symbol_config: JSON.stringify(configs),
+    };
+
+    const r = await apiFetch('/api/users/config', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+
+    if (r?.ok) {
+      showMsg('ms-msg', '✅ Multi-symbol config saved with independent lot settings', 'success');
+      // Reload to reflect saved state
+      await loadMultiSymbol();
+    } else {
+      const err = await r?.json().catch(() => null);
+      showMsg('ms-msg', '❌ ' + (err?.detail || 'Failed to save'), 'error');
+    }
+  }
+
+  async function saveTelegram() {
+    const body = {
+      telegram_bot_token: document.getElementById('tg-token').value.trim(),
+      telegram_chat_id: document.getElementById('tg-chat').value.trim(),
+      telegram_on_entry: document.getElementById('tg-entry').checked,
+      telegram_on_exit: document.getElementById('tg-exit').checked,
+      telegram_on_trail: document.getElementById('tg-trail').checked,
+      telegram_on_summary: document.getElementById('tg-summary').checked,
+    };
+    const r = await apiFetch('/api/users/config', { method: 'PATCH', body: JSON.stringify(body) });
+    showMsg('tg-msg', r?.ok ? '✅ Telegram settings saved' : '❌ Failed', r?.ok ? 'success' : 'error');
+  }
+
+  async function testTelegram() {
+    showMsg('tg-msg', 'Sending test message...', '');
+    const r = await apiFetch('/api/users/test-telegram', { method: 'POST' });
+    if (!r) { showMsg('tg-msg', '❌ Request failed', 'error'); return; }
+    const d = await r.json();
+    showMsg('tg-msg', r.ok ? d.message : ('❌ ' + (d.detail || 'Failed')),
+      r.ok ? 'success' : 'error');
+  }
+
+  function showMsg(id, msg, cls) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'msg ' + cls;
+    if (cls) setTimeout(() => el.textContent = '', 5000);
+  }
+
+
+</script>
+{% endblock %}

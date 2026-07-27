@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlgoBot — Automated Options Scalping for NSE</title>
+<meta name="description" content="1-minute options scalping, fully automated. EMA crossover strategies, live option-chain signal fusion, and instant exits — running on your Upstox account.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:        #0a0e14;
+  --bg2:       #0d1219;
+  --card:      #0f1620;
+  --card2:     #121b26;
+  --border:    #1c2733;
+  --border2:   #263340;
+  --text:      #e8ecf1;
+  --muted:     #5c6b7a;
+  --muted2:    #8693a1;
+  --green:     #00ff88;
+  --green-dim: #00cc6e;
+  --red:       #ff3d57;
+  --amber:     #ffaa00;
+  --cyan:      #3ec5ff;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+}
+a{color:inherit;text-decoration:none;}
+.mono{font-family:var(--mono);}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px;}
+:focus-visible{outline:2px solid var(--green);outline-offset:3px;}
+
+/* background grid texture */
+body::before{
+  content:"";
+  position:fixed;inset:0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size:64px 64px;
+  opacity:0.25;
+  pointer-events:none;
+  z-index:0;
+  mask-image:radial-gradient(ellipse 70% 60% at 50% 0%, black 0%, transparent 75%);
+}
+
+/* ============ NAV ============ */
+.nav{
+  position:sticky;top:0;z-index:50;
+  background:rgba(10,14,20,0.85);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+}
+.nav-inner{
+  display:flex;align-items:center;justify-content:space-between;
+  height:64px;
+}
+.nav-brand{
+  display:flex;align-items:center;gap:9px;
+  font-family:var(--mono);font-weight:700;font-size:16px;letter-spacing:-0.02em;
+}
+.nav-dot{width:8px;height:8px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:pulse-dot 2s ease-in-out infinite;}
+@keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.nav-links{display:flex;align-items:center;gap:32px;}
+.nav-links a{font-size:14px;color:var(--muted2);transition:color .15s;}
+.nav-links a:hover{color:var(--text);}
+.nav-cta{
+  font-family:var(--mono);font-size:13px;font-weight:600;
+  background:var(--green);color:#04130b;
+  padding:9px 18px;border-radius:6px;
+  transition:transform .15s, box-shadow .15s;
+}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,255,136,0.25);}
+.nav-login{font-size:14px;color:var(--text);margin-right:18px;}
+@media(max-width:860px){.nav-links a:not(.nav-login):not(.nav-cta){display:none;}}
+
+/* ============ HERO ============ */
+.hero{
+  position:relative;z-index:1;
+  padding:88px 0 64px;
+}
+.hero-grid{
+  display:grid;grid-template-columns:1.05fr 0.95fr;gap:56px;align-items:center;
+}
+@media(max-width:920px){.hero-grid{grid-template-columns:1fr;}}
+
+.eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:12px;color:var(--green);
+  background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.25);
+  padding:6px 12px;border-radius:100px;margin-bottom:22px;
+}
+.eyebrow .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 1.6s infinite;}
+
+.hero h1{
+  font-family:var(--mono);
+  font-size:clamp(34px, 5vw, 54px);
+  line-height:1.08;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  margin-bottom:22px;
+}
+.hero h1 .accent{color:var(--green);}
+.hero h1 .accent2{color:var(--cyan);}
+
+.hero-sub{
+  font-size:17px;line-height:1.6;color:var(--muted2);
+  max-width:520px;margin-bottom:34px;
+}
+.hero-cta-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:28px;}
+.btn-primary{
+  font-family:var(--mono);font-weight:600;font-size:14.5px;
+  background:var(--green);color:#04130b;
+  padding:14px 26px;border-radius:7px;
+  display:inline-flex;align-items:center;gap:8px;
+  transition:transform .15s, box-shadow .15s;
+  border:1px solid var(--green);
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,255,136,0.3);}
+.btn-secondary{
+  font-family:var(--mono);font-weight:600;font-size:14.5px;
+  background:transparent;color:var(--text);
+  padding:14px 26px;border-radius:7px;
+  border:1px solid var(--border2);
+  transition:border-color .15s, background .15s;
+}
+.btn-secondary:hover{border-color:var(--muted2);background:rgba(255,255,255,0.02);}
+.hero-note{font-size:12.5px;color:var(--muted);font-family:var(--mono);}
+.hero-note .ok{color:var(--green);}
+
+/* ---- live terminal hero visual ---- */
+.terminal{
+  background:var(--card);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  overflow:hidden;
+  box-shadow:0 30px 80px -20px rgba(0,0,0,0.6);
+}
+.terminal-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:11px 16px;border-bottom:1px solid var(--border);
+  background:var(--bg2);
+}
+.terminal-dot{width:10px;height:10px;border-radius:50%;}
+.terminal-bar .t1{background:#ff5f57;}
+.terminal-bar .t2{background:#febc2e;}
+.terminal-bar .t3{background:#28c840;}
+.terminal-title{
+  margin-left:8px;font-family:var(--mono);font-size:11.5px;color:var(--muted);
+}
+.terminal-body{padding:18px;font-family:var(--mono);font-size:12.5px;}
+.t-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:9px 0;border-bottom:1px dashed var(--border);
+  opacity:0;animation:slide-in .5s ease forwards;
+  gap:10px;
+}
+.t-row:last-child{border-bottom:none;}
+@keyframes slide-in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.t-left{display:flex;align-items:center;gap:10px;color:var(--muted2);min-width:0;flex:1 1 auto;}
+.t-left .t-sym{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.t-tag{
+  font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:0.03em;
+}
+.t-tag.entry{background:rgba(62,197,255,0.12);color:var(--cyan);}
+.t-tag.exit-win{background:rgba(0,255,136,0.12);color:var(--green);}
+.t-tag.exit-loss{background:rgba(255,61,87,0.12);color:var(--red);}
+.t-tag.sl{background:rgba(255,170,0,0.12);color:var(--amber);}
+.t-sym{color:var(--text);font-weight:600;}
+.t-pnl{font-weight:700;white-space:nowrap;}
+.t-pnl.pos{color:var(--green);}
+.t-pnl.neg{color:var(--red);}
+.terminal-stats{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  border-top:1px solid var(--border);
+}
+.t-stat{padding:14px 16px;border-right:1px solid var(--border);}
+.t-stat:last-child{border-right:none;}
+.t-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;}
+.t-stat-val{font-family:var(--mono);font-size:18px;font-weight:700;}
+.t-stat-val.green{color:var(--green);}
+
+/* ============ LOGOS / TRUST ============ */
+.trust{padding:36px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);position:relative;z-index:1;}
+.trust-row{display:flex;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;}
+.trust-item{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;color:var(--muted2);}
+.trust-item b{color:var(--text);}
+
+/* ============ SECTION HEADER ============ */
+.section{padding:96px 0;position:relative;z-index:1;}
+.section-head{max-width:640px;margin:0 0 56px;}
+.section-eyebrow{
+  font-family:var(--mono);font-size:12px;color:var(--cyan);
+  letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px;display:block;
+}
+.section h2{
+  font-family:var(--mono);font-size:clamp(26px,3.4vw,38px);
+  font-weight:700;letter-spacing:-0.02em;line-height:1.15;margin-bottom:16px;
+}
+.section-sub{font-size:16px;color:var(--muted2);line-height:1.6;}
+
+/* ============ FEATURES GRID ============ */
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+@media(max-width:860px){.feat-grid{grid-template-columns:1fr;}}
+.feat{background:var(--card);padding:32px 28px;transition:background .2s;}
+.feat:hover{background:var(--card2);}
+.feat-icon{
+  width:40px;height:40px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,255,136,0.08);border:1px solid rgba(0,255,136,0.2);
+  margin-bottom:18px;
+}
+.feat h3{font-size:16.5px;font-weight:700;margin-bottom:9px;letter-spacing:-0.01em;}
+.feat p{font-size:14px;color:var(--muted2);line-height:1.65;}
+.feat-tag{
+  display:inline-block;margin-top:14px;font-family:var(--mono);font-size:10.5px;
+  color:var(--muted);border:1px solid var(--border2);padding:3px 8px;border-radius:5px;
+}
+
+/* ============ STRATEGY TICKER (signature element) ============ */
+.ticker-wrap{
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  background:var(--bg2);
+  padding:22px 0;overflow:hidden;position:relative;z-index:1;
+}
+.ticker-track{
+  display:flex;gap:0;width:max-content;
+  animation:ticker-scroll 38s linear infinite;
+}
+@keyframes ticker-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.ticker-item{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:13px;
+  padding:0 28px;border-right:1px solid var(--border2);white-space:nowrap;
+}
+.ticker-item .sig{font-weight:700;font-size:11px;padding:2px 7px;border-radius:4px;}
+.ticker-item .sig.up{background:rgba(0,255,136,0.12);color:var(--green);}
+.ticker-item .sig.down{background:rgba(255,61,87,0.12);color:var(--red);}
+.ticker-item .sym{color:var(--text);font-weight:600;}
+.ticker-item .delta{color:var(--muted2);}
+
+/* ============ HOW IT WORKS ============ */
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;}
+@media(max-width:920px){.flow{grid-template-columns:1fr 1fr;}}
+@media(max-width:560px){.flow{grid-template-columns:1fr;}}
+.flow-step{position:relative;}
+.flow-num{
+  font-family:var(--mono);font-size:13px;color:var(--green);
+  border:1px solid rgba(0,255,136,0.3);width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;margin-bottom:18px;
+}
+.flow-step h4{font-size:15.5px;font-weight:700;margin-bottom:8px;}
+.flow-step p{font-size:13.5px;color:var(--muted2);line-height:1.6;}
+.flow-connector{
+  position:absolute;top:15px;left:100%;width:24px;height:1px;
+  background:repeating-linear-gradient(90deg,var(--border2) 0 6px,transparent 6px 10px);
+}
+@media(max-width:920px){.flow-connector{display:none;}}
+
+/* ============ STATS BAND ============ */
+.stats-band{
+  background:linear-gradient(180deg, var(--card) 0%, var(--bg) 100%);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  padding:72px 0;position:relative;z-index:1;
+}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center;}
+@media(max-width:760px){.stats-grid{grid-template-columns:1fr 1fr;}}
+.stat-num{
+  font-family:var(--mono);font-weight:800;font-size:clamp(28px,4vw,42px);
+  color:var(--green);letter-spacing:-0.02em;
+}
+.stat-label{font-size:13px;color:var(--muted2);margin-top:8px;}
+
+/* ============ MULTI-CHANNEL ALERTS ============ */
+.alerts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+@media(max-width:860px){.alerts-grid{grid-template-columns:1fr;}}
+.alert-card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;padding:26px;
+  position:relative;overflow:hidden;
+}
+.alert-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.alert-icon{font-size:22px;margin-bottom:14px;display:block;}
+.alert-card h4{font-size:15px;font-weight:700;margin-bottom:8px;}
+.alert-card p{font-size:13.5px;color:var(--muted2);line-height:1.6;}
+.alert-demo{
+  margin-top:16px;padding:10px 12px;background:var(--bg2);border-radius:7px;
+  font-family:var(--mono);font-size:11.5px;color:var(--muted2);border-left:2px solid var(--green);
+}
+
+/* ============ FINAL CTA ============ */
+.cta-section{padding:110px 0;text-align:center;position:relative;z-index:1;}
+.cta-box{
+  max-width:680px;margin:0 auto;
+  background:radial-gradient(ellipse at top, rgba(0,255,136,0.07), transparent 70%), var(--card);
+  border:1px solid var(--border2);border-radius:18px;padding:64px 40px;
+}
+.cta-box h2{font-family:var(--mono);font-size:clamp(26px,3.6vw,36px);font-weight:700;margin-bottom:16px;letter-spacing:-0.02em;}
+.cta-box p{color:var(--muted2);font-size:15.5px;margin-bottom:32px;max-width:440px;margin-left:auto;margin-right:auto;}
+
+/* ============ FOOTER ============ */
+.footer{border-top:1px solid var(--border);padding:40px 0;position:relative;z-index:1;}
+.footer-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+.footer-brand{font-family:var(--mono);font-weight:700;font-size:14px;color:var(--muted2);}
+.footer-links{display:flex;gap:24px;font-size:13px;color:var(--muted);}
+.footer-links a:hover{color:var(--text);}
+.footer-disclaimer{
+  margin-top:28px;padding-top:24px;border-top:1px solid var(--border);
+  font-size:11.5px;color:var(--muted);line-height:1.7;max-width:780px;
+}
+
+/* ── Contact row ── */
+.footer-contact{
+  display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+  margin-top:20px;padding-top:20px;border-top:1px solid var(--border);
+}
+.contact-item{
+  display:flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:12.5px;color:var(--muted2);
+  transition:color .15s;
+}
+.contact-item:hover{color:var(--text);}
+.contact-item svg{flex-shrink:0;opacity:0.85;}
+.social-row{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.social-icon{
+  width:32px;height:32px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--card2);border:1px solid var(--border2);
+  color:var(--muted2);transition:color .15s, border-color .15s, transform .15s;
+}
+.social-icon:hover{color:var(--green);border-color:rgba(0,255,136,0.35);transform:translateY(-2px);}
+@media(max-width:640px){
+  .footer-contact{flex-direction:column;align-items:flex-start;gap:14px;}
+  .social-row{margin-left:0;}
+}
+
+/* scroll reveal */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease, transform .6s ease;}
+.reveal.in{opacity:1;transform:translateY(0);}
+
+/* ================================================================
+   RESPONSIVE — tablet & phone
+   ================================================================ */
+@media(max-width:920px){
+  .wrap{padding:0 20px;}
+  .hero{padding:56px 0 48px;}
+  .section{padding:64px 0;}
+}
+
+@media(max-width:760px){
+  /* Nav */
+  .nav-inner{height:58px;}
+  .nav-brand{font-size:14px;}
+  .nav-links{gap:14px;}
+  .nav-login{margin-right:0;font-size:13px;}
+  .nav-cta{padding:8px 13px;font-size:12px;}
+
+  /* Hero */
+  .hero{padding:40px 0 36px;}
+  .eyebrow{font-size:11px;padding:5px 10px;margin-bottom:16px;}
+  .hero h1{font-size:clamp(28px,8vw,38px);margin-bottom:16px;}
+  .hero-sub{font-size:15px;margin-bottom:24px;}
+  .hero-cta-row{flex-direction:column;gap:10px;}
+  .hero-cta-row a{width:100%;justify-content:center;text-align:center;}
+  .hero-note{font-size:11px;line-height:1.7;}
+
+  /* Terminal card */
+  .terminal-body{padding:14px;font-size:11.5px;}
+  .terminal-stats{grid-template-columns:1fr;}
+  .t-stat{border-right:none;border-bottom:1px solid var(--border);}
+  .t-stat:last-child{border-bottom:none;}
+
+  /* Trust strip */
+  .trust{padding:22px 0;}
+  .trust-row{gap:14px 24px;justify-content:flex-start;}
+  .trust-item{font-size:11.5px;}
+
+  /* Section headers */
+  .section-head{margin-bottom:36px;}
+  .section h2{font-size:clamp(22px,6vw,28px);}
+  .section-sub{font-size:14.5px;}
+
+  /* Feature cards */
+  .feat{padding:24px 20px;}
+  .feat h3{font-size:15.5px;}
+  .feat p{font-size:13.5px;}
+
+  /* Ticker */
+  .ticker-item{padding:0 18px;font-size:12px;}
+
+  /* Flow steps */
+  .flow{gap:28px 20px;}
+  .flow-step h4{font-size:14.5px;}
+
+  /* Stats band */
+  .stats-band{padding:48px 0;}
+  .stats-grid{gap:28px 16px;}
+
+  /* Alerts */
+  .alert-card{padding:20px;}
+
+  /* CTA box */
+  .cta-section{padding:64px 0;}
+  .cta-box{padding:40px 24px;border-radius:14px;}
+  .cta-box h2{font-size:clamp(22px,6vw,28px);}
+  .cta-box p{font-size:14px;}
+
+  /* Footer */
+  .footer{padding:28px 0;}
+  .footer-inner{flex-direction:column;align-items:flex-start;gap:14px;}
+  .footer-links{gap:18px;flex-wrap:wrap;}
+  .footer-disclaimer{font-size:11px;margin-top:22px;padding-top:18px;}
+}
+
+@media(max-width:480px){
+  .wrap{padding:0 16px;}
+  .nav-brand{font-size:13px;}
+  .nav-links{gap:10px;}
+  .nav-cta{padding:7px 11px;font-size:11px;}
+  .hero h1{font-size:26px;}
+  .hero-sub{font-size:14px;}
+  .btn-primary, .btn-secondary{padding:13px 20px;font-size:13.5px;}
+  .terminal-bar{padding:9px 12px;}
+  .terminal-title{font-size:10.5px;}
+  .t-row{padding:7px 0;}
+  .t-tag{font-size:9px;padding:2px 6px;}
+  .trust-item{font-size:11px;}
+  .feat-icon{width:34px;height:34px;}
+  .stat-num{font-size:24px;}
+  .cta-box{padding:32px 18px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="nav-brand"><span class="nav-dot"></span>ALGOBOT</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#alerts">Alerts</a>
+      <a href="/login" class="nav-login">Log in</a>
+      <a href="/login" class="nav-cta">Get Started →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow"><span class="live-dot"></span>LIVE ON NSE · UPSTOX CONNECTED</div>
+      <h1>Options scalping,<br>on <span class="accent">autopilot</span>,<br>built for <span class="accent2">1-minute</span> moves.</h1>
+      <p class="hero-sub">
+        AlgoBot watches the 1-minute candle, the option chain, and order flow at once —
+        then enters, trails stop-loss, and exits faster than you can refresh your terminal.
+        Six strategies. One account. Zero screen time required.
+      </p>
+      <div class="hero-cta-row">
+        <a href="/login" class="btn-primary">Start Free with Paper Trading →</a>
+        <a href="#how" class="btn-secondary">See how it works</a>
+      </div>
+      <div class="hero-note">
+        <span class="ok">●</span> No credit card required &nbsp;·&nbsp; Connect Upstox in 60 seconds &nbsp;·&nbsp; Paper mode by default
+      </div>
+    </div>
+
+    <div class="terminal reveal">
+      <div class="terminal-bar">
+        <span class="terminal-dot t1"></span><span class="terminal-dot t2"></span><span class="terminal-dot t3"></span>
+        <span class="terminal-title">live_feed — NIFTY 25000</span>
+      </div>
+      <div class="terminal-body" id="liveTicker"></div>
+      <div class="terminal-stats">
+        <div class="t-stat"><div class="t-stat-label">Trades Today</div><div class="t-stat-val" id="statTrades">0</div></div>
+        <div class="t-stat"><div class="t-stat-label">Win Rate</div><div class="t-stat-val green" id="statWinRate">0%</div></div>
+        <div class="t-stat"><div class="t-stat-label">P&amp;L</div><div class="t-stat-val green" id="statPnl">₹0</div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ TRUST STRIP ============ -->
+<div class="trust">
+  <div class="wrap trust-row">
+    <div class="trust-item">⚡ <b>&lt;200ms</b> webhook fill detection</div>
+    <div class="trust-item">🔐 <b>Encrypted</b> token storage</div>
+    <div class="trust-item">📊 <b>6</b> built-in strategies</div>
+    <div class="trust-item">🔄 <b>Redis</b> multi-process architecture</div>
+    <div class="trust-item">📱 <b>3</b> alert channels</div>
+  </div>
+</div>
+
+<!-- ============ FEATURES ============ -->
+<section class="section" id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-eyebrow">// Core Engine</span>
+      <h2>Every edge a scalper needs, automated.</h2>
+      <p class="section-sub">Built around the same 1-minute logic a discretionary trader would run — EMA structure, momentum, volatility compression — but evaluated every single tick, never tired, never late.</p>
+    </div>
+
+    <div class="feat-grid reveal">
+      <div class="feat">
+        <div class="feat-icon">📐</div>
+        <h3>EMA 9/15/21 Regime Engine</h3>
+        <p>Classifies the market as trending, ranging, volatile, or no-trade in real time, and only fires strategies suited to that regime — no chasing chop.</p>
+        <span class="feat-tag">ADX + ATR confirmed</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🧬</div>
+        <h3>6 Strategies, One Engine</h3>
+        <p>Pullback, Trend Follow, Breakout, VWAP Bounce, EMA Cross, and Volatility-Compression Gamma Burst — running on the premium chart, instant direction flips.</p>
+        <span class="feat-tag">No debounce lag</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🔗</div>
+        <h3>Option Chain Signal Fusion</h3>
+        <p>Dynamically weighs volume vs. OI based on where each is concentrated near spot — PCR, Max Pain, COG shift, and rotation all feed into a single CE/PE bias filter.</p>
+        <span class="feat-tag">Updates every 30s</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">⚡</div>
+        <h3>Upstox Webhook Fills</h3>
+        <p>Order confirmations arrive via webhook, not polling — entries, stop-loss fills, and rejections are known in under 200ms instead of seconds.</p>
+        <span class="feat-tag">Auto API fallback</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">🛡️</div>
+        <h3>SL-L Only, Always Protected</h3>
+        <p>SL-Market orders are banned on NSE/BSE options — AlgoBot places Stop-Loss Limit orders and alerts you instantly if a stop-loss order ever fails to place.</p>
+        <span class="feat-tag">Order-fail alerts</span>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">📄</div>
+        <h3>Paper Mode, Zero Risk</h3>
+        <p>Every account starts in paper trading by default. Watch the engine make real decisions on real prices before a single rupee is on the line.</p>
+        <span class="feat-tag">One click to go live</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SIGNAL TICKER ============ -->
+<div class="ticker-wrap">
+  <div class="ticker-track" id="signalTicker"></div>
+</div>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section class="section" id="how">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-eyebrow">// Setup</span>
+      <h2>From signup to live in four steps.</h2>
+      <p class="section-sub">No code, no servers to manage — connect your account and the engine takes it from there.</p>
+    </div>
+
+    <div class="flow reveal">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <h4>Create your account</h4>
+        <p>Sign up with email or Google. Verify once — your account starts in safe paper-trading mode.</p>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <h4>Connect Upstox</h4>
+        <p>One-time API key setup, then a single click each morning refreshes your access token — no manual token copying.</p>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <h4>Pick your strategy</h4>
+        <p>Choose Nifty or Bank Nifty, set quantity, risk limits, and which of the 6 strategies to run.</p>
+        <div class="flow-connector"></div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <h4>Hit start. Watch it trade.</h4>
+        <p>Entries, trailing stop-loss, and exits run automatically. You get a live feed, voice, Telegram, and push alerts for every event.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATS BAND ============ -->
+<div class="stats-band">
+  <div class="wrap stats-grid reveal">
+    <div>
+      <div class="stat-num">1<span style="font-size:0.5em">min</span></div>
+      <div class="stat-label">Candle resolution</div>
+    </div>
+    <div>
+      <div class="stat-num">6</div>
+      <div class="stat-label">Built-in strategies</div>
+    </div>
+    <div>
+      <div class="stat-num">&lt;200<span style="font-size:0.5em">ms</span></div>
+      <div class="stat-label">Webhook fill latency</div>
+    </div>
+    <div>
+      <div class="stat-num">3</div>
+      <div class="stat-label">Alert channels</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ALERTS ============ -->
+<section class="section" id="alerts">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-eyebrow">// Stay In The Loop</span>
+      <h2>Know the moment the exchange responds.</h2>
+      <p class="section-sub">Entry filled, stop-loss trailed, target hit, order rejected — every confirmation reaches you on every channel, even with the dashboard closed.</p>
+    </div>
+
+    <div class="alerts-grid reveal">
+      <div class="alert-card">
+        <span class="alert-icon">🔊</span>
+        <h4>Voice Alerts</h4>
+        <p>Spoken aloud in your browser — choose male or female voice, control speed and volume, pick exactly which events talk.</p>
+        <div class="alert-demo">"Entry. Nifty Call 25000 at 120. Stop loss 110, target 145."</div>
+      </div>
+      <div class="alert-card">
+        <span class="alert-icon">✈️</span>
+        <h4>Telegram</h4>
+        <p>Every entry, exit, SL trail, and order failure pushed to your personal Telegram bot — plus daily summaries.</p>
+        <div class="alert-demo">🎯 TARGET hit · NIFTY25000CE · +₹1,250</div>
+      </div>
+      <div class="alert-card">
+        <span class="alert-icon">📲</span>
+        <h4>Push Notifications</h4>
+        <p>OS-level notifications even when the browser tab is closed — order confirmations land like a text message.</p>
+        <div class="alert-demo">✅ Order Confirmed: BUY 25 @ ₹120.50</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section class="cta-section">
+  <div class="wrap">
+    <div class="cta-box reveal">
+      <h2>Your edge doesn't sleep.<br>Neither should your execution.</h2>
+      <p>Start in paper mode, watch the engine work, switch to live whenever you're ready. No commitment, no card required.</p>
+      <a href="/login" class="btn-primary">Create Free Account →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-inner">
+      <div class="footer-brand"><span class="nav-dot" style="display:inline-block"></span> ALGOBOT</div>
+      <div class="footer-links">
+        <a href="/login">Log in</a>
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+      </div>
+    </div>
+    <div class="footer-contact">
+      <a href="tel:+911234567890" class="contact-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        +91 12345 67890
+      </a>
+      <a href="mailto:support@algobot.com" class="contact-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        support@algobot.com
+      </a>
+      <div class="social-row">
+        <a href="https://t.me/algobot_support" class="social-icon" aria-label="Telegram" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.6c.27-1.13-.86-2.07-1.93-1.62L2.4 10.42c-1.12.46-1.1 2.05.03 2.48l4.4 1.7 1.7 5.46c.27.86 1.36 1.13 2 .5l2.6-2.53 4.5 3.33c.92.68 2.23.18 2.46-.94L21.94 4.6zM8.5 13.6l9.1-6.6-7.3 7.9-.3 3.2-1.5-4.5z"/></svg>
+        </a>
+        <a href="https://wa.me/911234567890" class="social-icon" aria-label="WhatsApp" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 6.32A8.86 8.86 0 0 0 12.05 4c-4.9 0-8.9 4-8.9 8.9 0 1.57.41 3.1 1.19 4.45L3 21l3.78-1.32a8.9 8.9 0 0 0 4.27 1.09h.01c4.9 0 8.9-4 8.9-8.9 0-2.38-.93-4.62-2.36-6.3v-.05zm-5.55 13.7a7.4 7.4 0 0 1-3.77-1.03l-.27-.16-2.8.98.94-2.73-.18-.28a7.4 7.4 0 0 1-1.13-3.94c0-4.1 3.34-7.44 7.45-7.44 1.99 0 3.86.78 5.27 2.19a7.4 7.4 0 0 1 2.18 5.26c0 4.1-3.34 7.45-7.44 7.45zm4.08-5.58c-.22-.11-1.32-.65-1.53-.73-.2-.07-.36-.11-.5.11-.15.22-.58.73-.71.88-.13.15-.26.16-.48.06-.22-.11-.94-.35-1.79-1.1-.66-.6-1.1-1.32-1.23-1.54-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.21-.69-1.65-.18-.43-.37-.38-.5-.38-.13-.01-.28-.01-.43-.01-.15 0-.39.06-.6.28-.2.22-.79.77-.79 1.87 0 1.1.81 2.17.92 2.32.11.15 1.59 2.43 3.86 3.4.54.23.96.37 1.29.48.54.17 1.03.15 1.42.09.43-.06 1.32-.54 1.51-1.06.19-.52.19-.96.13-1.06-.06-.09-.2-.15-.42-.26z"/></svg>
+        </a>
+        <a href="https://twitter.com/algobot" class="social-icon" aria-label="X (Twitter)" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.4l-5.8-7.58-6.64 7.58H.46l8.6-9.83L0 1.15h7.59l5.25 6.93zM17.6 20.65h2.04L6.49 3.24H4.3z"/></svg>
+        </a>
+        <a href="https://instagram.com/algobot" class="social-icon" aria-label="Instagram" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+        </a>
+      </div>
+    </div>
+    <div class="footer-disclaimer">
+      Trading in options carries substantial risk of loss and is not suitable for every investor.
+      Past performance of any strategy is not indicative of future results. AlgoBot is an execution
+      tool that places orders on your behalf via your own Upstox account — it does not provide
+      investment advice, and all trading decisions and outcomes remain your responsibility. Always
+      start in paper trading mode and understand the strategies before enabling live orders.
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Simulated live terminal feed (illustrative — not real trade data) ──
+const SYMS = ['NIFTY25000CE','NIFTY24950PE','BANKNIFTY52000CE','NIFTY25050CE','BANKNIFTY51900PE'];
+const feedEl = document.getElementById('liveTicker');
+const rows = [];
+
+function pushRow(html){
+  rows.unshift(html);
+  if (rows.length > 5) rows.pop();
+  feedEl.innerHTML = rows.join('');
+}
+
+function randSym(){ return SYMS[Math.floor(Math.random()*SYMS.length)]; }
+function randPrice(){ return (80 + Math.random()*90).toFixed(2); }
+
+let tradeCount = 0, wins = 0, pnl = 0;
+
+function simulateEntry(){
+  const sym = randSym(); const price = randPrice();
+  pushRow(`<div class="t-row" style="animation-delay:0s">
+    <div class="t-left"><span class="t-tag entry">ENTRY</span><span class="t-sym">${sym}</span></div>
+    <div class="t-pnl">₹${price}</div>
+  </div>`);
+  setTimeout(() => simulateExit(sym, parseFloat(price)), 2600 + Math.random()*1800);
+}
+
+function simulateExit(sym, entryPrice){
+  const win = Math.random() > 0.32;
+  const pct = win ? (1 + Math.random()*2.5) : -(0.5 + Math.random()*1.5);
+  const exitPrice = (entryPrice * (1 + pct/100)).toFixed(2);
+  const pnlVal = Math.round((exitPrice - entryPrice) * 25);
+  tradeCount++; if (win) wins++; pnl += pnlVal;
+
+  pushRow(`<div class="t-row" style="animation-delay:0s">
+    <div class="t-left"><span class="t-tag ${win?'exit-win':'exit-loss'}">${win?'TARGET':'SL'}</span><span class="t-sym">${sym}</span></div>
+    <div class="t-pnl ${win?'pos':'neg'}">${win?'+':''}₹${pnlVal}</div>
+  </div>`);
+
+  document.getElementById('statTrades').textContent = tradeCount;
+  document.getElementById('statWinRate').textContent = Math.round(wins/tradeCount*100) + '%';
+  const pnlEl = document.getElementById('statPnl');
+  pnlEl.textContent = (pnl>=0?'+':'') + '₹' + pnl.toLocaleString('en-IN');
+  pnlEl.className = 't-stat-val ' + (pnl>=0?'green':'');
+  pnlEl.style.color = pnl>=0 ? 'var(--green)' : 'var(--red)';
+
+  setTimeout(simulateEntry, 1800 + Math.random()*2200);
+}
+
+simulateEntry();
+
+// ── Scrolling signal ticker (signature element) ──
+const SIGNALS = [
+  {sym:'NIFTY 25000 CE', dir:'up',   delta:'+0.62%'},
+  {sym:'BANKNIFTY 52000 PE', dir:'down', delta:'-0.41%'},
+  {sym:'PCR', dir:'up', delta:'1.34 BULLISH'},
+  {sym:'NIFTY 24950 PE', dir:'down', delta:'-0.28%'},
+  {sym:'MAX PAIN', dir:'up', delta:'25100 ABOVE SPOT'},
+  {sym:'BANKNIFTY 51950 CE', dir:'up', delta:'+0.55%'},
+  {sym:'OI ROTATION', dir:'up', delta:'UPWARD SHIFT'},
+  {sym:'NIFTY 25100 CE', dir:'up', delta:'+0.81%'},
+  {sym:'VOL/OI WEIGHT', dir:'down', delta:'70/30 VOLUME LED'},
+  {sym:'BANKNIFTY 52050 PE', dir:'down', delta:'-0.19%'},
+];
+const tickerTrack = document.getElementById('signalTicker');
+function buildTicker(){
+  let html = '';
+  for (let i=0;i<2;i++){ // duplicate for seamless loop
+    SIGNALS.forEach(s => {
+      html += `<div class="ticker-item">
+        <span class="sig ${s.dir}">${s.dir==='up'?'▲':'▼'} ${s.dir.toUpperCase()}</span>
+        <span class="sym">${s.sym}</span>
+        <span class="delta">${s.delta}</span>
+      </div>`;
+    });
+  }
+  tickerTrack.innerHTML = html;
+}
+buildTicker();
+
+// ── Scroll reveal ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ── If already logged in, offer quick dashboard link instead of forcing redirect ──
+if (localStorage.getItem('access_token')) {
+  const cta = document.querySelector('.nav-cta');
+  if (cta) { cta.textContent = 'Go to Dashboard →'; cta.href = '/dashboard'; }
+  const heroCta = document.querySelector('.hero-cta-row .btn-primary');
+  if (heroCta) { heroCta.textContent = 'Go to Dashboard →'; heroCta.href = '/dashboard'; }
+  const finalCta = document.querySelector('.cta-box .btn-primary');
+  if (finalCta) { finalCta.textContent = 'Go to Dashboard →'; finalCta.href = '/dashboard'; }
+}
+</script>
+</body>
+</html>

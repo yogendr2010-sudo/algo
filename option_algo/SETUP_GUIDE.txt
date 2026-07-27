@@ -1,0 +1,637 @@
+# 🚀 Complete Setup Guide — AlgoBot Trading Bot
+# For Beginners — Every Step Explained
+
+=============================================================
+WHAT YOU WILL SET UP
+=============================================================
+
+1. Python on your laptop
+2. The trading bot project folder
+3. A database (automatic)
+4. Run the bot locally (laptop)
+5. Connect your Upstox account
+6. Later: move to VPS (optional)
+
+=============================================================
+STEP 1 — INSTALL PYTHON
+=============================================================
+
+1. Open your browser
+2. Go to: https://www.python.org/downloads/
+3. Click the big yellow button "Download Python 3.11.x"
+4. Run the installer
+5. ⚠️  IMPORTANT: On the first screen, CHECK the box that says
+   "Add Python to PATH" before clicking Install
+
+6. Verify it worked:
+   - Press Windows key + R
+   - Type: cmd
+   - Press Enter
+   - In the black window type:
+     python --version
+   - You should see: Python 3.11.x
+
+=============================================================
+STEP 2 — INSTALL GIT (to download the project)
+=============================================================
+
+1. Go to: https://git-scm.com/download/win
+2. Download and install (click Next on everything)
+3. Verify:
+   - Open cmd again
+   - Type: git --version
+   - You should see: git version 2.x.x
+
+=============================================================
+STEP 3 — CREATE YOUR PROJECT FOLDER
+=============================================================
+
+Open CMD (black window) and type these one by one:
+
+  cd C:\Users\YourName\Desktop
+  mkdir algo_bot
+  cd algo_bot
+
+(Replace "YourName" with your actual Windows username)
+
+=============================================================
+STEP 4 — COPY PROJECT FILES
+=============================================================
+
+Copy all the project files into:
+  C:\Users\YourName\Desktop\algo_bot\
+
+Your folder should look like this:
+  algo_bot\
+    backend\
+    frontend\
+    scripts\
+    requirements.txt
+    .env.example
+    README.md
+
+=============================================================
+STEP 5 — CREATE A VIRTUAL ENVIRONMENT
+=============================================================
+
+A virtual environment keeps this project's Python packages
+separate from everything else on your laptop.
+
+In CMD (inside the algo_bot folder):
+
+  python -m venv venv
+
+Then activate it:
+
+  venv\Scripts\activate
+
+You will see (venv) appear at the start of the line.
+This means it is active. ✅
+
+⚠️  Every time you open a new CMD window, you must run
+    venv\Scripts\activate again before using the bot.
+
+=============================================================
+STEP 6 — INSTALL REQUIRED PACKAGES
+=============================================================
+
+Still in CMD with (venv) active:
+
+  pip install -r requirements.txt
+
+This downloads all needed packages. Takes 2-5 minutes.
+You will see lots of text — that is normal.
+
+If you see red errors about "Microsoft Visual C++":
+  Go to: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+  Download and install "Build Tools for Visual Studio"
+  Then run pip install again
+
+=============================================================
+STEP 7 — CREATE YOUR SECRET KEYS
+=============================================================
+
+The bot needs two secret keys for security.
+
+--- Key 1: SECRET_KEY (for login tokens) ---
+
+In CMD type:
+  python -c "import secrets; print(secrets.token_hex(32))"
+
+Copy the long string it prints. Example:
+  a3f8b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
+
+--- Key 2: FERNET_KEY (for encrypting your Upstox token) ---
+
+In CMD type:
+  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+Copy the string it prints. Example:
+  ZmDfcTF7_60GrrY167zsiPd67pEvs0aGOv2oasOM1Pg=
+
+=============================================================
+STEP 8 — CREATE YOUR .env FILE
+=============================================================
+
+1. Go to your project folder
+2. Find the file called: .env.example
+3. Copy it and rename the copy to: .env
+   (just ".env" — no ".example")
+
+=============================================================
+STEP 8b — INSTALL & CREATE THE POSTGRES DATABASE
+=============================================================
+
+Install PostgreSQL (skip if already installed):
+
+  Windows: download installer from https://www.postgresql.org/download/windows/
+  Ubuntu/VPS:
+    sudo apt update
+    sudo apt install -y postgresql postgresql-contrib
+
+Create the database and user (run as the postgres user):
+
+  Windows (psql shell) or Linux:
+    sudo -u postgres psql
+
+  Then inside psql:
+    CREATE USER algo_bot WITH PASSWORD 'your-db-password';
+    CREATE DATABASE algo_bot OWNER algo_bot;
+    GRANT ALL PRIVILEGES ON DATABASE algo_bot TO algo_bot;
+    \q
+
+Use the same username/password/dbname in DATABASE_URL below.
+
+4. Open .env with Notepad
+5. Fill in your values:
+
+------ .env file contents ------
+
+SECRET_KEY=paste-your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+FERNET_KEY=paste-your-fernet-key-here
+
+DATABASE_URL=postgresql+asyncpg://algo_bot:your-db-password@localhost:5432/algo_bot
+
+ADMIN_EMAIL=admin@algo_bot.com
+ADMIN_PASSWORD=choose-a-strong-password
+
+HOST=0.0.0.0
+PORT=8000
+DEBUG=true
+
+ALLOWED_ORIGINS=http://localhost:8000,https://algo_bot.com
+
+------ end of .env file ------
+
+Save the file.
+
+=============================================================
+STEP 9 — INITIALIZE THE DATABASE
+=============================================================
+
+In CMD (with venv active, inside project folder):
+
+  python scripts/init_db.py
+
+You should see:
+  ✅ Database tables created
+  ✅ Admin user created: admin@algo_bot.com
+
+This creates all tables inside your Postgres "algo_bot" database
+(connect with any Postgres client to inspect, e.g. pgAdmin, DBeaver,
+or `psql -U algo_bot -d algo_bot`).
+
+=============================================================
+STEP 10 — RUN THE BOT SERVER
+=============================================================
+
+In CMD (with venv active):
+
+  uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+
+You should see:
+  INFO:     Uvicorn running on http://0.0.0.0:8000
+  INFO:     Application startup complete.
+
+Now open your browser and go to:
+  http://localhost:8000
+
+You should see the login page! 🎉
+
+=============================================================
+STEP 11 — CONNECT YOUR UPSTOX ACCOUNT
+=============================================================
+
+To get your Upstox Access Token:
+
+1. Log in to: https://upstox.com/
+2. Go to Developer section: https://developer.upstox.com/
+3. Create an App (fill in any URL for redirect)
+4. Get your API Key and API Secret
+5. Use the Upstox OAuth flow to get your daily Access Token
+
+OR use the simple token generator script:
+
+  python scripts/get_upstox_token.py
+
+Follow the on-screen instructions.
+
+Then in the bot website:
+1. Go to Settings
+2. Paste your Upstox Access Token
+3. Save
+
+⚠️  Upstox tokens expire daily at 3:30 AM.
+    You must paste a new token each morning before trading.
+
+=============================================================
+STEP 12 — START TRADING
+=============================================================
+
+1. Open http://localhost:8000 in your browser
+2. Log in with your email and password
+3. Go to Settings → configure:
+   - Symbol (NIFTY or BANKNIFTY)
+   - Order Quantity (start with 25 — that is 1 lot of Nifty)
+   - Strategy (start with "pullback")
+   - Max trades per day (start with 3)
+   - Max loss per day (e.g. ₹2000)
+4. Click "Start Bot" on the Dashboard
+5. Watch the live feed for signals
+
+=============================================================
+STEP 13 — STOP THE SERVER
+=============================================================
+
+In the CMD window where uvicorn is running:
+Press: Ctrl + C
+
+=============================================================
+COMMON ERRORS AND FIXES
+=============================================================
+
+ERROR: "python is not recognized"
+FIX: Reinstall Python and check "Add to PATH"
+
+ERROR: "ModuleNotFoundError: No module named 'xxx'"
+FIX: Make sure (venv) is active, then run:
+     pip install -r requirements.txt
+
+ERROR: "Address already in use"
+FIX: Another program is using port 8000. Change port:
+     uvicorn backend.main:app --port 8001
+
+ERROR: "403 Forbidden" from Upstox
+FIX: Your access token expired. Get a new one from Upstox
+     and update it in Settings.
+
+ERROR: "Invalid Instrument key" from Upstox History API
+FIX: Check that your UNDERLYING_SYMBOL is correct (NIFTY)
+     and your token is valid and not expired.
+
+=============================================================
+FOLDER STRUCTURE EXPLAINED
+=============================================================
+
+algo_bot\
+  backend\              ← Python server code
+    main.py             ← Server entry point
+    config.py           ← Settings from .env
+    db\                 ← Database models
+    routers\            ← API endpoints
+    services\           ← Bot manager, auth, websocket
+    engine\             ← Trading logic
+  frontend\             ← Website pages
+    templates\          ← HTML pages
+    static\             ← CSS and JavaScript
+  scripts\
+    init_db.py          ← Run once to set up database
+    get_upstox_token.py ← Helper to get Upstox token
+    run.sh              ← Start server (Linux/VPS)
+  requirements.txt      ← List of Python packages needed
+  .env                  ← Your secret settings (never share!)
+  (Database is in Postgres — not a local file)
+
+=============================================================
+MOVING TO VPS (HOSTINGER) — LATER STEP
+=============================================================
+
+When you are ready to run 24/7 on your Hostinger VPS:
+
+1. Buy a VPS plan from Hostinger (Ubuntu 22.04)
+2. Connect via SSH:
+   ssh root@your-vps-ip
+
+3. Install Python:
+   apt update && apt install python3.11 python3-pip nginx -y
+
+4. Upload your project:
+   scp -r algo_bot root@your-vps-ip:/opt/
+
+5. Set up and run:
+   cd /opt/algo_bot
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   python scripts/init_db.py
+   bash scripts/run.sh
+
+6. Point algo_bot.com to your VPS IP in Hostinger DNS
+
+7. Set up SSL (free HTTPS):
+   apt install certbot python3-certbot-nginx -y
+   certbot --nginx -d algo_bot.com
+
+=============================================================
+PRODUCTION / MULTI-USER ARCHITECTURE (READ THIS)
+=============================================================
+
+This app runs as TWO cooperating processes, connected via Redis:
+
+  1. WEB process (uvicorn / backend.main:app)
+     - Serves the API + frontend pages
+     - STATELESS — holds no bot/engine state of its own
+     - Can be scaled (multiple uvicorn workers, or multiple
+       instances behind a load balancer)
+
+  2. WORKER process (worker.py)
+     - Owns ALL live SymbolEngine / BotThread instances
+     - Runs the Telegram command registry and per-user Option
+       Chain monitors
+     - Reads commands from a Redis queue (start/stop/modify SL/
+       modify target/squareoff/pause/resume)
+     - Writes live state snapshots to Redis (bot status, open
+       positions, OC analysis) and publishes trade/status events
+       to Redis Pub/Sub
+     - EXACTLY ONE instance must run at a time
+
+The web process never touches engine objects directly — every
+action (start bot, modify SL, etc.) is pushed onto a Redis queue
+and picked up by the worker; every read (bot status, positions, OC
+dashboard) comes from a Redis snapshot the worker keeps fresh.
+WebSocket pushes (live trade feed) are relayed via Redis Pub/Sub,
+so they work correctly even if the browser's WebSocket is served by
+a different web instance than the one that handled the original
+HTTP request.
+
+-------------------------------------------------------------
+INSTALL REDIS
+-------------------------------------------------------------
+
+  Ubuntu/VPS:
+    sudo apt update
+    sudo apt install -y redis-server
+    sudo systemctl enable --now redis-server
+
+  Windows (dev only): download from
+    https://github.com/microsoftarchive/redis/releases
+    or run via WSL / Docker:
+    docker run -d -p 6379:6379 redis:7-alpine
+
+  Verify:
+    redis-cli ping        -> should return "PONG"
+
+Set REDIS_URL in .env (default redis://localhost:6379/0 works for
+a single-VM deployment where both processes run on the same host).
+
+-------------------------------------------------------------
+SCALING
+-------------------------------------------------------------
+  - Web process: scale freely (more uvicorn --workers, or more
+    instances behind nginx/a load balancer) — it's stateless.
+  - Worker process: exactly ONE instance. Each user's bot is a
+    lightweight thread inside it; a single worker comfortably
+    handles many users. If you outgrow one worker's capacity,
+    run fully separate stacks (own Postgres/Redis/worker/web set)
+    for different user groups — don't run two workers against the
+    same Redis queue (commands would be split unpredictably
+    between them).
+
+-------------------------------------------------------------
+RUNNING IN PRODUCTION
+-------------------------------------------------------------
+
+  Option A — systemd (recommended):
+    sudo cp scripts/algo_bot-web.service    /etc/systemd/system/
+    sudo cp scripts/algo_bot-worker.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now algo_bot-web algo_bot-worker
+    sudo journalctl -u algo_bot-web -f      (web logs)
+    sudo journalctl -u algo_bot-worker -f   (worker logs — trades,
+                                              engine output, errors)
+
+  Option B — manual (both processes, one terminal):
+    bash scripts/run.sh prod
+
+BEFORE GOING LIVE — change these in .env:
+  - SECRET_KEY      → unique random 32+ char string
+  - FERNET_KEY      → generate with:
+      python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  - ADMIN_PASSWORD  → strong password (not "admin123")
+  - DEBUG=false
+  - ALLOWED_ORIGINS → your real domain(s), e.g. https://algo_bot.com
+                       (never "*" in production)
+  - REDIS_URL       → reachable by BOTH processes (same host = fine
+                       with the default; separate hosts need a
+                       network-accessible Redis with auth)
+
+The app prints warnings on startup (in the server logs / journalctl)
+if any of the above are still using insecure defaults.
+
+HEALTH CHECK:
+  GET /health  → {"status","database","redis","bots_running"}
+  Use this for uptime monitors, Docker HEALTHCHECK, or load balancer
+  health probes. No authentication required. "redis":"error" or
+  "database":"error" mean the WEB process can't reach that
+  dependency; "bots_running" reflects what the WORKER last reported
+  (0 if the worker is down, even if the web process itself is fine).
+
+GRACEFUL SHUTDOWN:
+  On SIGTERM (systemctl stop / Ctrl+C), worker.py signals all running
+  bot threads to stop and waits up to 10 seconds for each to exit
+  cleanly (cancelling SL orders is NOT automatic — square off open
+  positions manually before stopping if needed). The web process has
+  no bot state and shuts down immediately.
+
+TROUBLESHOOTING:
+  - "Bot already running" but dashboard shows stopped: check
+    `sudo journalctl -u algo_bot-worker -f` — the worker may have
+    crashed; bot:status:{user} in Redis expires after ~24s if the
+    worker isn't heartbeating.
+  - Start/stop/SL changes seem to do nothing: confirm
+    algo_bot-worker is running (`systemctl status
+    algo_bot-worker`) and Redis is reachable from both processes
+    (`redis-cli ping` on each host).
+  - Frontend not receiving live updates: WebSocket relies on Redis
+    Pub/Sub — check `redis-cli ping` and that REDIS_URL matches in
+    both .env files if running on separate hosts.
+
+=============================================================
+NOTIFICATIONS (Telegram, Voice, Push)
+=============================================================
+
+Every trade event — entry, exit, SL trail, order failures, bot
+errors — is published through one pipeline (worker -> Redis pub/sub
+-> web -> WebSocket) and fans out to THREE channels:
+
+  1. TELEGRAM — per-user bot token + chat ID, set in Settings.
+     Toggle which events send messages (entry/exit/trail/summary).
+
+  2. VOICE ALERTS — browser text-to-speech (Web Speech API), no
+     setup needed. Configure on the Dashboard: enable, volume,
+     speed, male/female voice, and which events are spoken aloud.
+     Per-browser/device setting (localStorage).
+
+  3. PUSH NOTIFICATIONS — OS-level notifications even when the
+     dashboard tab is closed (subject to browser/OS support).
+     Requires VAPID keys:
+
+       python scripts/generate_vapid_keys.py
+       -> copy VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_CLAIM_EMAIL
+          into .env
+
+     If VAPID_PUBLIC_KEY is empty, the "Push Notifications" card on
+     the dashboard stays hidden — the rest of the app works
+     normally. Once configured, each user clicks "Enable" once per
+     device/browser (browser will prompt for notification
+     permission).
+
+ORDER ALERTS — if a BUY order is rejected, or (critically) a
+STOP-LOSS order fails to place after a successful entry, an
+ORDER_ALERT event fires immediately on all three channels — this is
+the "response from the exchange" signal for live trading: don't
+silently lose protection on a position.
+
+=============================================================
+UPSTOX WEBHOOK — REAL-TIME ORDER UPDATES
+=============================================================
+
+By default, the engine polls Upstox's order API to detect fills.
+Registering the webhook makes fills instant (< 200ms instead of
+1-3s polling lag) and eliminates unnecessary API calls per tick.
+
+HOW IT WORKS:
+  Upstox POSTs to your server every time an order changes state
+  (open → trigger_pending → complete / rejected / cancelled).
+  The engine listens on Redis pub/sub for the fill — no polling
+  needed. API polling falls back automatically if webhook is not
+  configured or times out.
+
+SETUP:
+  1. Generate a Postback Secret (any strong random string):
+       python -c "import secrets; print(secrets.token_hex(32))"
+     Add to .env:
+       WEBHOOK_SECRET=<your-secret>
+
+  2. Register the webhook URL in your Upstox developer app:
+       Account → Developer → Apps → your app → Webhooks
+       URL: https://yourdomain.com/api/webhook/upstox
+       Events: select ORDER_UPDATE (or "All order events")
+       Postback Secret: paste your WEBHOOK_SECRET
+
+  3. Verify the webhook is reachable:
+       GET https://yourdomain.com/api/webhook/upstox/test
+       Should return: {"status":"ok"}
+
+  4. The webhook URL must be publicly reachable HTTPS. For local
+     dev/testing use ngrok:
+       ngrok http 8000
+     Then use the ngrok URL as the webhook URL (change daily).
+
+ORDER_UPDATE EVENTS (all fire on Telegram + Voice + Push + Feed):
+  - ✅ complete    — order filled at exchange
+  - ❌ rejected    — order rejected by broker/exchange
+  - ❌ cancelled   — order cancelled (SL cancel before exit)
+  - ⚡ trigger_pending — SL triggered, awaiting execution
+
+The webhook also writes the fill price to Redis, so _get_fill_price
+returns immediately on the next BUY/SL placement instead of polling
+for up to 15 seconds.
+
+=============================================================
+GOOGLE SIGN-IN + EMAIL VERIFICATION SETUP
+=============================================================
+
+USER SIGN-UP FLOWS:
+  A) Email + Password  → verification email sent → click link to activate
+  B) Sign in with Google → account created instantly (Google pre-verifies)
+  C) Admin account (init_db) → pre-verified, no email needed
+
+UNVERIFIED USERS:
+  - Can log in and access Settings / Dashboard
+  - Bot START is BLOCKED with a clear error + banner until email verified
+  - Verification email can be resent from Settings page or login screen
+
+─────────────────────────────────────────────────────────────
+GOOGLE SIGN-IN SETUP (optional)
+─────────────────────────────────────────────────────────────
+
+  1. Go to https://console.cloud.google.com/apis/credentials
+  2. Select or create a project
+  3. Create credentials → OAuth 2.0 Client ID (type: Web application)
+  4. Add Authorised redirect URI:
+       https://yourdomain.com/api/auth/google/callback
+  5. Add Authorised JavaScript origin:
+       https://yourdomain.com
+  6. Copy Client ID and Client Secret into .env:
+       GOOGLE_CLIENT_ID=...
+       GOOGLE_CLIENT_SECRET=...
+       APP_BASE_URL=https://yourdomain.com
+  7. Enable the "Google People API" or "Google Identity" API
+
+  If GOOGLE_CLIENT_ID is blank → Sign in with Google button is hidden
+  automatically. Regular email/password login still works.
+
+─────────────────────────────────────────────────────────────
+EMAIL VERIFICATION SETUP (recommended for production)
+─────────────────────────────────────────────────────────────
+
+  Uses SMTP — works with Gmail App Passwords or any provider.
+
+  Gmail App Password (easiest):
+  1. Enable 2-Step Verification at myaccount.google.com/security
+  2. Go to myaccount.google.com/apppasswords
+  3. Create an App Password for AlgoBot (select "Mail")
+  4. Set in .env:
+       SMTP_HOST=smtp.gmail.com
+       SMTP_PORT=587
+       SMTP_USER=you@gmail.com
+       SMTP_PASSWORD=xxxx-xxxx-xxxx-xxxx   ← 16-char App Password
+       SMTP_FROM=AlgoBot <you@gmail.com>
+       APP_BASE_URL=https://yourdomain.com  ← used in email links
+
+  Dev / no email:
+  If SMTP_USER/PASSWORD are blank → verification URLs are printed
+  to the server log instead. Safe for local development; NOT suitable
+  for production (users cannot self-verify without email access).
+
+=============================================================
+DAILY ROUTINE (once bot is working)
+=============================================================
+
+Every morning before 9:15 AM:
+
+1. Get new Upstox access token
+2. Open http://localhost:8000 (or your website)
+3. Go to Settings → paste new token → Save
+4. Click "Start Bot"
+5. Monitor the dashboard
+
+Every evening after 3:30 PM:
+1. Click "Stop Bot"
+2. Check trade history and P&L
+
+=============================================================
+SUPPORT
+=============================================================
+
+If you get stuck:
+- Take a screenshot of the error
+- Note which step you were on
+- Check the CMD window for error messages
+
+=============================================================

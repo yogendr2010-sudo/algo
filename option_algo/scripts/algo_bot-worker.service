@@ -1,0 +1,42 @@
+# /etc/systemd/system/algo_bot-worker.service
+#
+# Production systemd service for the AlgoBot WORKER process (worker.py).
+#
+# This is the ONLY process that holds live SymbolEngine/BotThread
+# instances, the Telegram command registry, and the per-user
+# OptionChainAnalyzer monitors. It communicates with the web process(es)
+# exclusively via Redis (command queue, state snapshots, pub/sub events).
+#
+# EXACTLY ONE instance of this service must run at a time. Do NOT set
+# multiple replicas — bot_manager._bots and the Telegram engine registry
+# are in-process globals within this single process.
+#
+# Install: see algo_bot-web.service header.
+# Logs:    sudo journalctl -u algo_bot-worker -f
+
+[Unit]
+Description=AlgoBot Worker (trading engines, Telegram, OC monitors)
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=algo_bot
+Group=algo_bot
+WorkingDirectory=/opt/option_algo
+EnvironmentFile=/opt/option_algo/.env
+ExecStart=/opt/option_algo/venv/bin/python worker.py
+
+# Give the SIGTERM handler time to stop all bot threads gracefully
+# (bot_manager.stop_all join_timeout is 10s)
+TimeoutStopSec=20
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

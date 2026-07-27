@@ -1,0 +1,766 @@
+{% extends "base.html" %}
+{% block title %}Admin — AlgoBot{% endblock %}
+{% block content %}
+<h1>Admin Panel</h1>
+
+<!-- Platform Stats -->
+<div class="summary-row">
+  <div class="sum-card">
+    <div class="sum-val" id="a-users">—</div>
+    <div class="sum-lbl">Total Users</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val green" id="a-bots">—</div>
+    <div class="sum-lbl">Bots Running</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val" id="a-trades">—</div>
+    <div class="sum-lbl">Total Trades</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val" id="a-pnl">—</div>
+    <div class="sum-lbl">Platform P&L (₹)</div>
+  </div>
+</div>
+
+<style>
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 16px
+  }
+
+  @media(max-width:600px) {
+    .summary-row {
+      grid-template-columns: repeat(2, 1fr)
+    }
+  }
+
+  .sum-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center
+  }
+
+  .sum-val {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 4px
+  }
+
+  .sum-lbl {
+    font-size: 11px;
+    color: var(--muted)
+  }
+
+  .user-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap
+  }
+
+  .user-row:last-child {
+    border-bottom: none
+  }
+
+  .user-info {
+    flex: 1;
+    min-width: 200px
+  }
+
+  .user-name {
+    font-weight: 600;
+    font-size: 14px
+  }
+
+  .user-email {
+    font-size: 12px;
+    color: var(--muted)
+  }
+
+  .user-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px
+  }
+
+  .user-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap
+  }
+
+  .abtn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .2s
+  }
+
+  .abtn:hover {
+    background: var(--card2)
+  }
+
+  .abtn.danger {
+    border-color: var(--red);
+    color: var(--red)
+  }
+
+  .abtn.danger:hover {
+    background: rgba(239, 68, 68, .1)
+  }
+
+  .abtn.success {
+    border-color: var(--green);
+    color: var(--green)
+  }
+
+  .abtn.success:hover {
+    background: rgba(16, 185, 129, .1)
+  }
+
+  .abtn.amber {
+    border-color: var(--amber);
+    color: var(--amber)
+  }
+
+  .search-bar {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    margin-bottom: 14px
+  }
+
+  .search-bar:focus {
+    border-color: var(--blue)
+  }
+</style>
+
+<!-- Users List -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 style="margin:0">All Users</h2>
+    <button onclick="loadAll()" class="abtn">↻ Refresh</button>
+  </div>
+  <input type="text" id="user-search" class="search-bar" placeholder="Search by name or email..."
+    oninput="filterUsers()" />
+  <div id="users-list">
+    <div class="muted center" style="padding:20px">Loading...</div>
+  </div>
+</div>
+
+<!-- Exchange Holidays -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 style="margin:0">Exchange Holidays</h2>
+    <button onclick="loadHolidays()" class="abtn">↻ Refresh</button>
+  </div>
+  <form class="cfg-form" onsubmit="return addHoliday(event)">
+    <input type="date" id="hol-date" required>
+    <input type="text" id="hol-desc" placeholder="Description (e.g. Diwali)">
+    <input type="text" id="hol-exchange" placeholder="Exchange" value="NSE" style="max-width:100px">
+    <button type="submit" class="abtn success">+ Add Holiday</button>
+  </form>
+  <div id="holidays-list" style="margin-top:12px">
+    <div class="muted center" style="padding:20px">Loading...</div>
+  </div>
+</div>
+
+<!-- Streamer Symbol Tokens -->
+<div class="card" style="margin-top:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 style="margin:0">Streamer Symbol Tokens</h2>
+    <button onclick="loadStreamerTokens()" class="abtn">↻ Refresh</button>
+  </div>
+  <form class="cfg-form" onsubmit="return addStreamerToken(event)">
+    <input type="text" id="tok-symbol" placeholder="Symbol (e.g. NIFTY)" required style="max-width:140px">
+    <input type="text" id="tok-streamer" placeholder="Streamer token (e.g. NSE_INDEX|Nifty 50)" required>
+    <input type="text" id="tok-history" placeholder="History key (optional)">
+    <input type="number" id="tok-step" placeholder="Strike step" style="max-width:110px">
+    <input type="text" id="tok-exchange" placeholder="Exchange" value="NSE" style="max-width:100px">
+    <button type="submit" class="abtn success">+ Add Token</button>
+  </form>
+  <div id="tokens-list" style="margin-top:12px">
+    <div class="muted center" style="padding:20px">Loading...</div>
+  </div>
+</div>
+
+<!-- Compliance / Audit Portal -->
+<div class="card compliance-section">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 style="margin:0">🔒 Admin Compliance Portal</h2>
+    <button onclick="loadCompliance()" class="abtn">↻ Refresh</button>
+  </div>
+  <p class="muted" style="font-size:12.5px;margin:-6px 0 14px">
+    Read-only audit trail and consent history. Historical records can never be modified or deleted.
+  </p>
+
+  <div class="audit-tabs">
+    <div class="audit-tab active" onclick="switchAuditTab('audit-logs', this)">📋 Audit Logs</div>
+    <div class="audit-tab" onclick="switchAuditTab('consent-history', this)">✅ Consent History</div>
+  </div>
+
+  <!-- Audit Logs Panel -->
+  <div id="panel-audit-logs" class="audit-panel active">
+    <div class="audit-controls">
+      <input type="text" id="audit-user-search" placeholder="Search by User ID..." class="search-bar"
+        style="margin-bottom:0">
+      <select id="audit-event-filter">
+        <option value="">All Events</option>
+      </select>
+      <button onclick="filterAuditLogs()" class="abtn">🔍 Search</button>
+    </div>
+    <div id="audit-logs-list">
+      <div class="muted center" style="padding:20px">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Consent History Panel -->
+  <div id="panel-consent-history" class="audit-panel">
+    <div class="audit-controls">
+      <input type="text" id="consent-user-search" placeholder="Search by User ID..." class="search-bar"
+        style="margin-bottom:0">
+      <button onclick="filterConsentHistory()" class="abtn">🔍 Search</button>
+    </div>
+    <div id="consent-records-list">
+      <div class="muted center" style="padding:20px">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ── Compliance / Audit Portal ── */
+  .compliance-section {
+    margin-top: 16px
+  }
+
+  .audit-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px
+  }
+
+  .audit-controls input,
+  .audit-controls select {
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    flex: 1;
+    min-width: 120px
+  }
+
+  .audit-controls input:focus,
+  .audit-controls select:focus {
+    border-color: var(--blue)
+  }
+
+  .audit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 10px
+  }
+
+  .audit-row:last-child {
+    border-bottom: none
+  }
+
+  .audit-row.tampered {
+    background: rgba(239, 68, 68, .05);
+    margin: 0 -12px;
+    padding: 10px 12px;
+    border-radius: 6px
+  }
+
+  .audit-info {
+    flex: 1;
+    min-width: 200px
+  }
+
+  .audit-event {
+    margin-bottom: 2px
+  }
+
+  .audit-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    background: rgba(59, 130, 246, .12);
+    color: var(--blue)
+  }
+
+  .audit-desc {
+    font-size: 13px;
+    color: var(--text);
+    margin-top: 2px
+  }
+
+  .audit-ts {
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0
+  }
+
+  .audit-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 14px
+  }
+
+  .audit-tab {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px 8px 0 0;
+    background: var(--card2, #1a2235);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .2s
+  }
+
+  .audit-tab.active {
+    background: var(--card);
+    border-bottom-color: var(--card);
+    font-weight: 600
+  }
+
+  .audit-tab:hover {
+    background: var(--card)
+  }
+
+  .audit-panel {
+    display: none
+  }
+
+  .audit-panel.active {
+    display: block
+  }
+
+  .cfg-form {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center
+  }
+
+  .cfg-form input {
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    flex: 1;
+    min-width: 120px
+  }
+
+  .cfg-form input:focus {
+    border-color: var(--blue)
+  }
+
+  .cfg-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap
+  }
+
+  .cfg-row:last-child {
+    border-bottom: none
+  }
+
+  .cfg-row .cfg-info {
+    flex: 1;
+    min-width: 200px;
+    font-size: 13px
+  }
+</style>
+
+<script>
+  // Admin access check. base.html's DOMContentLoaded handler already
+  // calls syncUserInfo() and caches role in localStorage — but it runs
+  // concurrently with this script, so we call syncUserInfo() directly
+  // here too (cheap, idempotent) rather than racing on localStorage.
+  async function checkAdminAccess() {
+    const token = localStorage.getItem('access_token');
+    if (!token) { window.location.href = '/'; return false; }
+
+    const user = await syncUserInfo();
+    if (!user) { window.location.href = '/'; return false; }
+
+    if (user.role !== 'admin') {
+      window.location.href = '/dashboard';
+      return false;
+    }
+    return true;
+  }
+
+  let allUsers = [];
+
+  async function loadStats() {
+    const r = await apiFetch('/api/admin/stats');
+    if (!r || !r.ok) return;
+    const s = await r.json();
+    document.getElementById('a-users').textContent = s.total_users;
+    document.getElementById('a-bots').textContent = s.bots_running;
+    document.getElementById('a-trades').textContent = s.total_trades;
+    const pnlEl = document.getElementById('a-pnl');
+    pnlEl.textContent = (s.total_pnl >= 0 ? '+' : '') + s.total_pnl;
+    pnlEl.className = 'sum-val ' + (s.total_pnl >= 0 ? 'green' : 'red');
+  }
+
+  async function loadUsers() {
+    const r = await apiFetch('/api/admin/users');
+    if (!r || !r.ok) return;
+    allUsers = await r.json();
+    renderUsers(allUsers);
+  }
+
+  function renderUsers(users) {
+    const list = document.getElementById('users-list');
+    if (!users.length) {
+      list.innerHTML = '<div class="muted center" style="padding:20px">No users found</div>';
+      return;
+    }
+    list.innerHTML = users.map(u => {
+      const roleTag = u.role === 'admin'
+        ? '<span class="badge" style="background:rgba(139,92,246,.15);color:#a78bfa">Admin</span>' : '';
+      const botTag = u.bot_running
+        ? '<span class="badge badge-running">Bot Running</span>'
+        : '<span class="badge badge-stopped">Stopped</span>';
+      const tokenTag = u.has_token
+        ? '<span class="badge" style="background:rgba(16,185,129,.1);color:var(--green)">Token ✓</span>'
+        : '<span class="badge" style="background:rgba(239,68,68,.1);color:var(--red)">No Token</span>';
+      const activeTag = u.is_active
+        ? '<span class="badge" style="background:rgba(16,185,129,.08);color:var(--green)">Active</span>'
+        : '<span class="badge" style="background:rgba(239,68,68,.08);color:var(--red)">Disabled</span>';
+      return `
+    <div class="user-row" id="user-row-${u.id}">
+      <div class="user-info">
+        <div class="user-name">${u.full_name || '(no name)'} <span style="color:var(--muted);font-weight:400;font-size:12px">#${u.id}</span></div>
+        <div class="user-email">${u.email}</div>
+        <div class="user-badges" style="margin-top:6px">
+          ${roleTag}${botTag}${tokenTag}${activeTag}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Joined: ${(u.created_at || '').slice(0, 10)}</div>
+      </div>
+      <div class="user-actions">
+        ${u.bot_running ? `<button class="abtn danger" onclick="stopUserBot(${u.id})">■ Stop Bot</button>` : ''}
+        <button class="abtn ${u.is_active ? 'danger' : 'success'}"
+          onclick="toggleUser(${u.id}, ${u.is_active})">
+          ${u.is_active ? '🚫 Disable' : '✓ Enable'}
+        </button>
+        <button class="abtn amber" onclick="viewUserTrades(${u.id})">📊 Trades</button>
+      </div>
+    </div>`;
+    }).join('');
+  }
+
+  function filterUsers() {
+    const q = document.getElementById('user-search').value.toLowerCase();
+    if (!q) { renderUsers(allUsers); return; }
+    renderUsers(allUsers.filter(u =>
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.full_name || '').toLowerCase().includes(q)
+    ));
+  }
+
+  async function stopUserBot(uid) {
+    if (!confirm('Stop bot for this user?')) return;
+    const r = await apiFetch(`/api/admin/users/${uid}/stop-bot`, { method: 'POST' });
+    if (r?.ok) { loadAll(); }
+  }
+
+  async function toggleUser(uid, isActive) {
+    const action = isActive ? 'disable' : 'enable';
+    if (!confirm(`${action} this user?`)) return;
+    const r = await apiFetch(`/api/admin/users/${uid}/toggle-active`, { method: 'POST' });
+    if (r?.ok) { loadAll(); }
+  }
+
+  function viewUserTrades(uid) {
+    window.open(`/trades?user_id=${uid}`, '_blank');
+  }
+
+  // ── Exchange Holidays ──────────────────────────────────────────
+  let allHolidays = [];
+
+  async function loadHolidays() {
+    const r = await apiFetch('/api/admin/holidays');
+    if (!r || !r.ok) return;
+    allHolidays = await r.json();
+    renderHolidays();
+  }
+
+  function renderHolidays() {
+    const list = document.getElementById('holidays-list');
+    if (!allHolidays.length) {
+      list.innerHTML = '<div class="muted center" style="padding:20px">No holidays configured</div>';
+      return;
+    }
+    list.innerHTML = allHolidays.map(h => `
+    <div class="cfg-row">
+      <div class="cfg-info">
+        <strong>${h.holiday_date}</strong> — ${h.description || '(no description)'}
+        <span style="color:var(--muted)">[${h.exchange}]</span>
+      </div>
+      <button class="abtn danger" onclick="deleteHoliday(${h.id})">🗑 Delete</button>
+    </div>`).join('');
+  }
+
+  async function addHoliday(ev) {
+    ev.preventDefault();
+    const body = {
+      holiday_date: document.getElementById('hol-date').value,
+      description: document.getElementById('hol-desc').value || null,
+      exchange: document.getElementById('hol-exchange').value || 'NSE',
+    };
+    const r = await apiFetch('/api/admin/holidays', { method: 'POST', body: JSON.stringify(body) });
+    if (r?.ok) {
+      document.getElementById('hol-date').value = '';
+      document.getElementById('hol-desc').value = '';
+      loadHolidays();
+    } else {
+      alert('Failed to add holiday' + (r ? ` (${r.status})` : ''));
+    }
+    return false;
+  }
+
+  async function deleteHoliday(id) {
+    if (!confirm('Delete this holiday?')) return;
+    const r = await apiFetch(`/api/admin/holidays/${id}`, { method: 'DELETE' });
+    if (r?.ok) loadHolidays();
+  }
+
+  // ── Streamer Symbol Tokens ─────────────────────────────────────
+  let allTokens = [];
+
+  async function loadStreamerTokens() {
+    const r = await apiFetch('/api/admin/streamer-tokens');
+    if (!r || !r.ok) return;
+    allTokens = await r.json();
+    renderStreamerTokens();
+  }
+
+  function renderStreamerTokens() {
+    const list = document.getElementById('tokens-list');
+    if (!allTokens.length) {
+      list.innerHTML = '<div class="muted center" style="padding:20px">No streamer tokens configured</div>';
+      return;
+    }
+    list.innerHTML = allTokens.map(t => `
+    <div class="cfg-row">
+      <div class="cfg-info">
+        <strong>${t.symbol}</strong> [${t.exchange}] — ${t.streamer_token}
+        ${t.history_key ? `<br><span style="color:var(--muted)">History key: ${t.history_key}</span>` : ''}
+        ${t.strike_step ? `<span style="color:var(--muted)"> · Step: ${t.strike_step}</span>` : ''}
+        ${!t.is_active ? '<span class="badge" style="background:rgba(239,68,68,.08);color:var(--red)">Inactive</span>' : ''}
+      </div>
+      <button class="abtn danger" onclick="deleteStreamerToken(${t.id})">🗑 Delete</button>
+    </div>`).join('');
+  }
+
+  async function addStreamerToken(ev) {
+    ev.preventDefault();
+    const stepVal = document.getElementById('tok-step').value;
+    const body = {
+      symbol: document.getElementById('tok-symbol').value.toUpperCase(),
+      streamer_token: document.getElementById('tok-streamer').value,
+      history_key: document.getElementById('tok-history').value || null,
+      strike_step: stepVal ? parseInt(stepVal, 10) : null,
+      exchange: document.getElementById('tok-exchange').value || 'NSE',
+    };
+    const r = await apiFetch('/api/admin/streamer-tokens', { method: 'POST', body: JSON.stringify(body) });
+    if (r?.ok) {
+      document.getElementById('tok-symbol').value = '';
+      document.getElementById('tok-streamer').value = '';
+      document.getElementById('tok-history').value = '';
+      document.getElementById('tok-step').value = '';
+      loadStreamerTokens();
+    } else {
+      alert('Failed to add streamer token' + (r ? ` (${r.status})` : ''));
+    }
+    return false;
+  }
+
+  async function deleteStreamerToken(id) {
+    if (!confirm('Delete this streamer token?')) return;
+    const r = await apiFetch(`/api/admin/streamer-tokens/${id}`, { method: 'DELETE' });
+    if (r?.ok) loadStreamerTokens();
+  }
+
+  // ── Compliance — Audit Log Viewer ─────────────────────────────
+  let allAuditLogs = [];
+  let auditEventTypes = [];
+
+  async function loadComplianceStats() {
+    // Load consent history count
+    const r = await apiFetch('/api/admin/compliance/consent-history?limit=1');
+    if (r && r.ok) {
+      const data = await r.json();
+    }
+  }
+
+  async function loadAuditLogs(params = {}) {
+    const query = new URLSearchParams();
+    if (params.user_id) query.set('user_id', params.user_id);
+    if (params.event_type) query.set('event_type', params.event_type);
+    if (params.limit) query.set('limit', params.limit);
+
+    const r = await apiFetch(`/api/admin/compliance/audit-logs?${query.toString()}`);
+    if (!r || !r.ok) return;
+    allAuditLogs = await r.json();
+    renderAuditLogs(allAuditLogs);
+  }
+
+  async function loadAuditEventTypes() {
+    const r = await apiFetch('/api/admin/compliance/audit-log-event-types');
+    if (!r || !r.ok) return;
+    auditEventTypes = await r.json();
+    const sel = document.getElementById('audit-event-filter');
+    if (sel) {
+      sel.innerHTML = '<option value="">All Events</option>' +
+        auditEventTypes.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+  }
+
+  function renderAuditLogs(logs) {
+    const list = document.getElementById('audit-logs-list');
+    if (!list) return;
+    if (!logs.length) {
+      list.innerHTML = '<div class="muted center" style="padding:20px">No audit logs found</div>';
+      return;
+    }
+    list.innerHTML = logs.map(l => {
+      const meta = l.log_metadata ? JSON.parse(l.log_metadata) : null;
+      return `
+    <div class="audit-row">
+      <div class="audit-info">
+        <div class="audit-event"><span class="audit-badge">${l.event_type}</span></div>
+        <div class="audit-desc">${l.description}</div>
+        ${meta ? `<div class="audit-meta muted" style="font-size:11px;margin-top:2px">${JSON.stringify(meta)}</div>` : ''}
+      </div>
+      <div class="audit-ts muted" style="font-size:11px">
+        ${l.created_at ? l.created_at.slice(0, 19).replace('T', ' ') : '—'}
+        ${l.user_id ? `<br>User #${l.user_id}` : ''}
+      </div>
+    </div>`;
+    }).join('');
+  }
+
+  function filterAuditLogs() {
+    const userId = document.getElementById('audit-user-search').value.trim();
+    const eventType = document.getElementById('audit-event-filter').value;
+    loadAuditLogs({
+      user_id: userId || undefined,
+      event_type: eventType || undefined,
+      limit: 200
+    });
+  }
+
+  function refreshAuditLogs() {
+    loadAuditEventTypes();
+    loadAuditLogs({ limit: 200 });
+  }
+
+
+  // ── Compliance — Consent History Viewer ────────────────────────
+  let allConsentHistory = [];
+
+  async function loadAdminConsentHistory(userId = '') {
+    const query = new URLSearchParams();
+    if (userId) query.set('user_id', userId);
+    query.set('limit', '100');
+
+    const r = await apiFetch(`/api/admin/compliance/consent-history?${query.toString()}`);
+    if (!r || !r.ok) return;
+    allConsentHistory = await r.json();
+    renderConsentHistory(allConsentHistory);
+  }
+
+  function renderConsentHistory(records) {
+    const list = document.getElementById('consent-records-list');
+    if (!list) return;
+    if (!records.length) {
+      list.innerHTML = '<div class="muted center" style="padding:20px">No consent records found</div>';
+      return;
+    }
+    list.innerHTML = records.map(r => {
+      // Compute expected hash for integrity check
+      const expectedHash = '';
+      const hashValid = r.audit_hash ? (r.audit_hash === expectedHash || '⚠️ Hash mismatch — record may have been tampered') : 'No hash';
+      const tamperWarning = r.audit_hash && expectedHash && r.audit_hash !== expectedHash;
+      return `
+    <div class="audit-row${tamperWarning ? ' tampered' : ''}">
+      <div class="audit-info">
+        <div><b>User #${r.user_id}</b></div>
+        <div class="audit-desc">
+          ${r.accepted ? '<span style="color:var(--green)">✅ Accepted</span>' : '<span style="color:var(--red)">❌ Declined</span>'}
+          · Version: ${r.risk_version || '—'}
+          · Hash: <code style="font-size:10px">${r.audit_hash ? r.audit_hash.slice(0, 16) + '...' : '—'}</code>
+        </div>
+        ${tamperWarning ? '<div style="color:var(--red);font-size:12px;margin-top:4px">🚨 WARNING: Audit hash mismatch — record may have been modified</div>' : ''}
+      </div>
+      <div class="audit-ts muted" style="font-size:11px">
+        ${r.created_at ? r.created_at.slice(0, 19).replace('T', ' ') : '—'}
+        ${r.ip_address ? `<br>🌐 ${r.ip_address}` : ''}
+      </div>
+    </div>`;
+    }).join('');
+  }
+
+  function filterConsentHistory() {
+    const userId = document.getElementById('consent-user-search').value.trim();
+    loadAdminConsentHistory(userId);
+  }
+
+
+function switchAuditTab(panelId, tabEl) {
+  // Deactivate all tabs and panels
+  document.querySelectorAll('.audit-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.audit-panel').forEach(p => p.classList.remove('active'));
+  // Activate clicked tab and corresponding panel
+  tabEl.classList.add('active');
+  document.getElementById('panel-' + panelId).classList.add('active');
+}
+
+function loadAll() { loadStats(); loadUsers(); loadHolidays(); loadStreamerTokens(); }
+function loadCompliance() { refreshAuditLogs(); loadAdminConsentHistory(); }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const ok = await checkAdminAccess();
+    if (!ok) return;   // already redirected
+    loadAll();
+    loadCompliance();
+    setInterval(loadAll, 20000);
+  });
+</script>
+{% endblock %}

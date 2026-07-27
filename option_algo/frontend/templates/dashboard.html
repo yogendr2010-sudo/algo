@@ -1,0 +1,1916 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — AlgoBot{% endblock %}
+{% block content %}
+
+<!-- Email verification banner (hidden until checkEmailVerified() shows it) -->
+<div id="verify-banner" style="display:none;background:#78350f;border-bottom:1px solid #b45309;
+     padding:10px 20px;font-size:13px;align-items:center;gap:12px;flex-wrap:wrap">
+  ⚠️ <b>Email not verified</b> — the bot won't start until you verify.
+  <a href="/settings" style="color:#fcd34d;text-decoration:underline">Go to Settings</a> to resend.
+</div>
+
+<!-- Subscription-required banner (hidden until checkSubscriptionStatus() shows it) -->
+<div id="subscription-banner" style="display:none;background:linear-gradient(120deg,#7f1d1d,#b91c1c);
+     padding:10px 20px;font-size:13px;align-items:center;gap:12px;flex-wrap:wrap;color:#fff">
+  🔒 <b>Subscription required</b> — <span id="subscription-banner-msg">your trial/subscription has ended.</span>
+  <a href="/billing" style="color:#fff;text-decoration:underline;font-weight:600">View Plans →</a>
+</div>
+
+<!-- Trial banner (hidden unless status === 'trial') -->
+<div id="trial-banner" style="display:none;background:linear-gradient(120deg,#0ea5e9,#10b981);
+     padding:12px 20px;align-items:center;gap:16px;flex-wrap:wrap;color:#fff">
+  <div style="display:flex;align-items:center;gap:8px;font-weight:700">🚀 Free Trial Active</div>
+  <span id="trial-banner-detail" style="font-size:13px;opacity:.95">—</span>
+  <div
+    style="flex:1;min-width:140px;max-width:260px;height:7px;border-radius:6px;background:rgba(255,255,255,.3);overflow:hidden">
+    <div id="trial-banner-progress" style="height:100%;background:#fff;border-radius:6px;width:0%"></div>
+    <a href="/billing"
+      style="background:#fff;color:#059669;padding:5px 14px;border-radius:8px;font-weight:700;font-size:12.5px;text-decoration:none">Upgrade
+      Now</a>
+  </div>
+</div><!-- end trial-banner -->
+
+  <!-- Top Stats Bar -->
+  <div class="top-stats">
+    <div class="stat-pill"><span class="pill-label">Symbol</span><b id="d-symbol">—</b></div>
+    <div class="stat-pill"><span class="pill-label">Mode</span><b id="d-mode">—</b></div>
+    <div class="stat-pill"><span class="pill-label">Strategy</span><b id="d-strategy">—</b></div>
+    <div class="stat-pill"><span class="pill-label">Qty</span><b id="d-qty">—</b></div>
+    <div class="stat-pill" id="extra-syms-pill" style="display:none"><span class="pill-label">Also</span><b
+        id="d-extra">—</b></div>
+  </div><!-- end top-stats -->
+
+  <!-- Subscription Status (standalone section — shown only when ≤7 days remain) -->
+  <div class="card" id="sub-status-card" style="display:none">
+    <div class="card-head">
+      <span class="card-title">Subscription</span>
+      <a href="/billing" class="btn-secondary btn-sm">Manage</a>
+    </div>
+    <div id="sub-status-summary" class="muted">Loading…</div>
+    <div id="sub-status-progress-wrap" style="display:none;margin-top:8px">
+      <div style="height:6px;border-radius:6px;background:rgba(148,163,184,.2);overflow:hidden">
+        <div id="sub-status-progress-bar"
+          style="height:100%;width:0%;border-radius:6px;background:linear-gradient(90deg,#10b981,#3b82f6)"></div>
+      </div>
+      <div class="btn-row mt12" id="sub-status-actions" style="display:none">
+        <a href="/billing" class="btn-secondary btn-sm">⚡ Quick Upgrade</a>
+        <a href="/billing" class="btn-secondary btn-sm">🔄 Quick Renew</a>
+      </div>
+    </div>
+  </div>
+
+<!-- Pending Trades Queue (Semi Auto mode — standalone section) -->
+  <div class="card" id="pending-trades-card" style="display:none">
+    <div class="card-head">
+      <span class="card-title">⏳ Pending Trades</span>
+      <span class="muted" style="font-size:11px" id="pending-count">0 waiting</span>
+    </div>
+    <div id="pending-trades-body">
+      <div class="muted center py16">No pending trades</div>
+    </div>
+  </div>
+
+  <!-- Payment Pending Verification (Manual Payment mode — shown after user submits a manual payment) -->
+  <div class="card" id="payment-pending-card" style="display:none">
+    <div class="card-head">
+      <span class="card-title">💳 Payment Status</span>
+    </div>
+    <div id="payment-pending-body" style="padding:10px 0">
+      <div class="muted center py16">Checking payment status...</div>
+    </div>
+  </div>
+
+  <div class="dash-main">
+
+    <!-- LEFT COLUMN -->
+    <div class="dash-left">
+
+      <!-- Bot Control -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Bot Control</span>
+            <div class="status-badge" id="bot-badge">Stopped</div>
+            <div class="btn-row mt12">
+              <button id="btn-start" class="btn-green" onclick="startBot()">▶ Start</button>
+              <button id="btn-stop" class="btn-red" onclick="stopBot()">■ Stop</button>
+              <button id="btn-pause" class="btn-amber" onclick="pauseBot()" title="Pause new entries">⏸
+                Pause</button>
+              <button id="btn-resume" class="btn-blue" onclick="resumeBot()" style="display:none">▶ Resume</button>
+            </div>
+            <div id="bot-err" class="msg error" style="display:none"></div>
+          </div>
+        </div><!-- end Bot Control card -->
+
+        <!-- Live Positions (multi-symbol) -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Live Positions</span>
+            <span class="ws-dot" id="ws-dot" title="WebSocket">●</span>
+          </div>
+          <div id="positions-wrap">
+            <div class="muted center py16">No active positions</div>
+          </div>
+        </div><!-- end Live Positions card -->
+
+        <!-- Today Stats -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">Today</span>
+            <span class="muted" style="font-size:11px" id="today-date"></span>
+          </div>
+          <div class="stat-grid-4">
+            <div class="mini-stat">
+              <div class="mini-val" id="t-trades">—</div>
+              <div class="mini-lbl">Trades</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="t-wins">—</div>
+              <div class="mini-lbl">Wins</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="t-pnl">—</div>
+              <div class="mini-lbl">P&L ₹</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="t-wr">—</div>
+              <div class="mini-lbl">Win%</div>
+            </div>
+          </div>
+        </div><!-- end Today Stats card -->
+
+        <!-- Today's Trades -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">Today's Trades</span></div>
+          <div class="table-wrap">
+            <table class="data-table" style="font-size:12px">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Symbol</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>P&L</th>
+                  <th>Status</th>
+                  <th>Mode</th>
+                </tr>
+              </thead>
+              <tbody id="today-trades-body">
+                <tr>
+                  <td colspan="7" class="muted center" style="padding:16px">Loading…</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div><!-- end Today's Trades card -->
+
+    </div><!-- end left -->
+
+    <!-- RIGHT COLUMN -->
+    <div class="dash-right">
+
+      <!-- Position Controls (shown when position open) -->
+      <div class="card" id="pos-ctrl-card" style="display:none">
+        <div class="card-head"><span class="card-title">Position Controls</span>
+          <span class="badge-live" id="pos-mode-badge">LIVE</span>
+        </div>
+        <div class="pos-ctrl-grid">
+          <div class="ctrl-block">
+            <label>Modify SL</label>
+            <div class="input-row">
+              <input id="new-sl" type="number" step="0.05" class="ctrl-inp"
+                placeholder="New SL price" />
+              <button onclick="modifySL()" class="ctrl-btn red">Set SL</button>
+            </div>
+            <div class="ctrl-hint">Current: <b id="cur-sl">—</b></div>
+          </div>
+          <div class="ctrl-block">
+            <label>Modify Target</label>
+            <div class="input-row">
+              <input id="new-target" type="number" step="0.05" class="ctrl-inp"
+                placeholder="New target price" />
+              <button onclick="modifyTarget()" class="ctrl-btn green">Set Target</button>
+            </div>
+            <div class="ctrl-hint">Current: <b id="cur-target">—</b></div>
+          </div>
+        </div>
+        <button onclick="squareOff()" class="btn-squareoff">
+          ⚡ Square Off Now
+        </button>
+        <div id="ctrl-msg" class="msg"></div>
+      </div><!-- end pos-ctrl-card -->
+
+      <!-- Live Feed -->
+      <div class="card feed-card">
+        <div class="card-head">
+          <span class="card-title">Live Feed</span>
+          <div class="feed-controls">
+            <button onclick="clearFeed()" class="mini-btn">Clear</button>
+            <select id="feed-filter" class="mini-sel" onchange="filterFeed()">
+              <option value="all">All</option>
+              <option value="entry">Entries</option>
+              <option value="exit">Exits</option>
+              <option value="signal">Signals</option>
+            </select>
+          </div>
+        </div>
+        <div id="feed-log"></div>
+      </div><!-- end Live Feed card -->
+
+      <!-- Voice Alerts -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🔊 Voice Alerts</span>
+          <label class="va-toggle">
+            <input type="checkbox" id="va-enabled" onchange="vaUpdate()" />
+            <span class="va-toggle-slider"></span>
+          </label>
+        </div>
+
+        <div id="va-body" class="va-body">
+          <div class="va-row">
+            <label class="va-label">Volume</label>
+            <input id="va-volume" type="range" min="0" max="100" step="5"
+              class="va-range" oninput="vaUpdate()" />
+            <span class="va-val" id="va-volume-val">80%</span>
+          </div>
+
+          <div class="va-row">
+            <label class="va-label">Speed</label>
+            <input id="va-rate" type="range" min="0.5" max="2" step="0.1"
+              class="va-range" oninput="vaUpdate()" />
+            <span class="va-val" id="va-rate-val">1.0x</span>
+          </div>
+
+          <div class="va-row">
+            <label class="va-label">Voice</label>
+            <select id="va-gender" class="mini-sel" onchange="vaUpdate()">
+              <option value="auto">Auto</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+            <button onclick="vaTest()" class="mini-btn">▶ Test</button>
+          </div>
+
+          <div class="va-row va-events">
+            <label class="va-label">Announce</label>
+            <div class="va-checks">
+              <label><input type="checkbox" id="va-ev-ENTRY" onchange="vaUpdate()" /> Entry</label>
+              <label><input type="checkbox" id="va-ev-EXIT" onchange="vaUpdate()" /> Exit</label>
+              <label><input type="checkbox" id="va-ev-SL_TRAIL" onchange="vaUpdate()" /> SL Trail</label>
+              <label><input type="checkbox" id="va-ev-SL_CANCEL" onchange="vaUpdate()" /> SL Cancel</label>
+              <label><input type="checkbox" id="va-ev-BOT_STATUS" onchange="vaUpdate()" /> Bot Status</label>
+              <label><input type="checkbox" id="va-ev-DIRECTION_CHANGE" onchange="vaUpdate()" /> Direction Change</label>
+              <label><input type="checkbox" id="va-ev-ORDER_ALERT" onchange="vaUpdate()" /> Order Alerts</label>
+              <label><input type="checkbox" id="va-ev-ORDER_UPDATE" onchange="vaUpdate()" /> Order Confirms</label>
+              <label><input type="checkbox" id="va-ev-RISK_LIMIT_HIT" onchange="vaUpdate()" /> Risk Limit Hit</label>
+            </div>
+          </div>
+        </div>
+      </div><!-- end Voice Alerts card -->
+
+      <!-- Push Notifications -->
+      <div class="card" id="push-card" style="display:none">
+        <div class="card-head">
+          <span class="card-title">📲 Push Notifications</span>
+        </div>
+        <div class="va-body">
+          <p class="muted" id="push-status-text" style="margin:4px 0 10px">Checking…</p>
+          <div class="va-row" style="margin-top:0">
+            <button id="btn-push-enable" onclick="enablePush()" class="mini-btn">Enable</button>
+            <button id="btn-push-disable" onclick="disablePush()" class="mini-btn" style="display:none">Disable</button>
+            <button id="btn-push-test" onclick="testPush()" class="mini-btn" style="display:none">🔔 Test</button>
+          </div>
+          <p class="muted" style="margin-top:8px;font-size:11px">
+            Get notified of trade entries, exits, and order alerts even when this tab is closed.
+          </p>
+        </div>
+      </div><!-- end push-card -->
+
+    </div><!-- end right -->
+
+  </div><!-- end dash-main -->
+
+                                          <!-- Telegram Setup Quick Card (shown if no telegram configured) -->
+                                          <div class="card" id="tg-setup-card" style="display:none">
+                                            <div class="card-head">
+                                              <span class="card-title">📱 Enable Telegram Commands</span>
+                                              <a href="/settings#telegram" class="mini-btn">Configure →</a>
+                                            </div>
+                                            <p class="muted">Control your bot from Telegram: /status /sl /target
+                                              /squareoff /pause /resume</p>
+                                          </div>
+
+                                          <style>
+                                            /* ═══════════════════════════════════════════
+   DASHBOARD — RESPONSIVE / MOBILE-FIRST CSS
+   ═══════════════════════════════════════════ */
+
+                                            /* ── Top Stats Bar ── */
+                                            .top-stats {
+                                              display: flex;
+                                              gap: 6px;
+                                              flex-wrap: wrap;
+                                              margin-bottom: 14px;
+                                              overflow-x: auto;
+                                              -webkit-overflow-scrolling: touch;
+                                              padding-bottom: 2px;
+                                            }
+
+                                            .stat-pill {
+                                              background: var(--card);
+                                              border: 1px solid var(--border);
+                                              border-radius: 20px;
+                                              padding: 6px 12px;
+                                              display: flex;
+                                              align-items: center;
+                                              gap: 5px;
+                                              font-size: 12.5px;
+                                              white-space: nowrap;
+                                              flex-shrink: 0;
+                                            }
+
+                                            .pill-label {
+                                              color: var(--muted);
+                                              font-size: 10.5px
+                                            }
+
+                                            /* ── Main layout: single column on mobile, 2-col on desktop ── */
+                                            .dash-main {
+                                              display: flex;
+                                              flex-direction: column;
+                                              gap: 14px
+                                            }
+
+                                            @media(min-width:860px) {
+                                              .dash-main {
+                                                display: grid;
+                                                grid-template-columns: 1fr 1fr;
+                                                gap: 16px;
+                                                align-items: start
+                                              }
+                                            }
+
+                                            .dash-left,
+                                            .dash-right {
+                                              display: flex;
+                                              flex-direction: column;
+                                              gap: 14px
+                                            }
+
+                                            /* ── Card heads ── */
+                                            .card-head {
+                                              display: flex;
+                                              justify-content: space-between;
+                                              align-items: center;
+                                              margin-bottom: 12px;
+                                              flex-wrap: wrap;
+                                              gap: 8px
+                                            }
+
+                                            .card-title {
+                                              font-size: 14px;
+                                              font-weight: 600;
+                                              color: var(--text)
+                                            }
+
+                                            /* ── Bot status badge ── */
+                                            white-space:nowrap;
+                                            flex-shrink:0;
+                                            }
+
+                                            .pill-label {
+                                              color: var(--muted);
+                                              font-size: 10.5px
+                                            }
+
+                                            /* ── Main layout: single column on mobile, 2-col on desktop ── */
+                                            .dash-main {
+                                              display: flex;
+                                              flex-direction: column;
+                                              gap: 14px
+                                            }
+
+                                            @media(min-width:860px) {
+                                              .dash-main {
+                                                display: grid;
+                                                grid-template-columns: 1fr 1fr;
+                                                gap: 16px;
+                                                align-items: start
+                                              }
+                                            }
+
+                                            .dash-left,
+                                            .dash-right {
+                                              display: flex;
+                                              flex-direction: column;
+                                              gap: 14px
+                                            }
+
+                                            /* ── Card heads ── */
+                                            .card-head {
+                                              display: flex;
+                                              justify-content: space-between;
+                                              align-items: center;
+                                              margin-bottom: 12px;
+                                              flex-wrap: wrap;
+                                              gap: 8px
+                                            }
+
+                                            .card-title {
+                                              font-size: 14px;
+                                              font-weight: 600;
+                                              color: var(--text)
+                                            }
+
+                                            /* ── Bot status badge ── */
+                                            .status-badge {
+                                              padding: 4px 12px;
+                                              border-radius: 20px;
+                                              font-size: 12px;
+                                              font-weight: 600;
+                                              background: rgba(148, 163, 184, .15);
+                                              color: var(--muted);
+                                              white-space: nowrap
+                                            }
+
+                                            .status-badge.running {
+                                              background: rgba(34, 197, 94, .15);
+                                              color: var(--green)
+                                            }
+
+                                            .status-badge.paused {
+                                              background: rgba(245, 158, 11, .15);
+                                              color: #f59e0b
+                                            }
+
+                                            .status-badge.error {
+                                              background: rgba(239, 68, 68, .15);
+                                              color: var(--red)
+                                            }
+
+                                            /* ── Buttons ── */
+                                            .btn-row {
+                                              display: flex;
+                                              gap: 8px;
+                                              flex-wrap: wrap
+                                            }
+
+                                            .btn-green,
+                                            .btn-red,
+                                            .btn-amber,
+                                            .btn-blue {
+                                              padding: 10px 18px;
+                                              border: none;
+                                              border-radius: 8px;
+                                              font-size: 13px;
+                                              font-weight: 600;
+                                              cursor: pointer;
+                                              transition: opacity .2s;
+                                              min-height: 42px;
+                                              flex: 1 1 auto;
+                                              /* touch-friendly, grow to fill */
+                                            }
+
+                                            @media(min-width:480px) {
+
+                                              .btn-green,
+                                              .btn-red,
+                                              .btn-amber,
+                                              .btn-blue {
+                                                flex: 0 1 auto;
+                                              }
+                                            }
+
+                                            .btn-green {
+                                              background: var(--green);
+                                              color: #000
+                                            }
+
+                                            .btn-red {
+                                              background: var(--red);
+                                              color: #fff
+                                            }
+
+                                            .btn-amber {
+                                              background: #f59e0b;
+                                              color: #000
+                                            }
+
+                                            .btn-blue {
+                                              background: var(--blue);
+                                              color: #fff
+                                            }
+
+                                            .btn-green:disabled,
+                                            .btn-red:disabled {
+                                              opacity: .4;
+                                              cursor: not-allowed
+                                            }
+
+                                            .btn-green:hover:not(:disabled) {
+                                              opacity: .85
+                                            }
+
+                                            .btn-red:hover:not(:disabled) {
+                                              opacity: .85
+                                            }
+
+                                            .mt12 {
+                                              margin-top: 12px
+                                            }
+
+                                            /* ── Position card ── */
+                                            .pos-card {
+                                              background: var(--bg);
+                                              border: 1px solid var(--border);
+                                              border-radius: 10px;
+                                              padding: 12px;
+                                              margin-bottom: 10px
+                                            }
+
+                                            .pos-header {
+                                              display: flex;
+                                              justify-content: space-between;
+                                              align-items: center;
+                                              margin-bottom: 10px;
+                                              flex-wrap: wrap;
+                                              gap: 6px
+                                            }
+
+                                            .pos-sym {
+                                              font-size: 14px;
+                                              font-weight: 600
+                                            }
+
+                                            .pos-table {
+                                              width: 100%;
+                                              border-collapse: collapse;
+                                              font-size: 13px
+                                            }
+
+                                            .pos-table td {
+                                              padding: 5px 0;
+                                              border-bottom: 1px solid rgba(51, 65, 85, .4);
+                                              vertical-align: middle
+                                            }
+
+                                            .pos-table td:first-child {
+                                              color: var(--muted);
+                                              width: 80px;
+                                              font-size: 12px
+                                            }
+
+                                            .pnl-pos {
+                                              color: var(--green);
+                                              font-weight: 700
+                                            }
+
+                                            .pnl-neg {
+                                              color: var(--red);
+                                              font-weight: 700
+                                            }
+
+                                            /* ── Today stats ── */
+                                            .stat-grid-4 {
+                                              display: grid;
+                                              grid-template-columns: repeat(4, 1fr);
+                                              gap: 8px
+                                            }
+
+                                            @media(max-width:400px) {
+                                              .stat-grid-4 {
+                                                grid-template-columns: repeat(2, 1fr);
+                                                gap: 8px
+                                              }
+                                            }
+
+                                            .mini-stat {
+                                              text-align: center;
+                                              padding: 8px 4px
+                                            }
+
+                                            .mini-val {
+                                              font-size: 20px;
+                                              font-weight: 700
+                                            }
+
+                                            @media(max-width:400px) {
+                                              .mini-val {
+                                                font-size: 18px
+                                              }
+                                            }
+
+                                            .mini-lbl {
+                                              font-size: 11px;
+                                              color: var(--muted);
+                                              margin-top: 2px
+                                            }
+
+                                            /* ── Today's trades table — horizontal scroll on mobile ── */
+                                            .table-wrap {
+                                              overflow-x: auto;
+                                              -webkit-overflow-scrolling: touch;
+                                              border-radius: 6px
+                                            }
+
+                                            .data-table {
+                                              width: 100%;
+                                              border-collapse: collapse;
+                                              font-size: 12px;
+                                              min-width: 460px
+                                            }
+
+                                            .data-table th {
+                                              text-align: left;
+                                              padding: 8px 10px;
+                                              font-size: 11px;
+                                              color: var(--muted);
+                                              font-weight: 600;
+                                              border-bottom: 1px solid var(--border);
+                                              white-space: nowrap;
+                                            }
+
+                                            .data-table td {
+                                              padding: 8px 10px;
+                                              border-bottom: 1px solid var(--border);
+                                              white-space: nowrap
+                                            }
+
+                                            .data-table tr:last-child td {
+                                              border-bottom: none
+                                            }
+
+                                            .green {
+                                              color: var(--green)
+                                            }
+
+                                            .red {
+                                              color: var(--red)
+                                            }
+
+                                            .badge-target {
+                                              display: inline-block;
+                                              padding: 2px 8px;
+                                              border-radius: 4px;
+                                              font-size: 10.5px;
+                                              font-weight: 700;
+                                              background: rgba(16, 185, 129, .15);
+                                              color: var(--green)
+                                            }
+
+                                            .badge-sl {
+                                              background: rgba(239, 68, 68, .15);
+                                              color: var(--red);
+                                              display: inline-block;
+                                              padding: 2px 8px;
+                                              border-radius: 4px;
+                                              font-size: 10.5px;
+                                              font-weight: 700
+                                            }
+
+                                            .badge-manual {
+                                              background: rgba(139, 92, 246, .15);
+                                              color: #a78bfa;
+                                              display: inline-block;
+                                              padding: 2px 8px;
+                                              border-radius: 4px;
+                                              font-size: 10.5px;
+                                              font-weight: 700
+                                            }
+
+                                            /* ── Position controls ── */
+                                            .pos-ctrl-grid {
+                                              display: grid;
+                                              grid-template-columns: 1fr;
+                                              gap: 12px;
+                                              margin-bottom: 14px
+                                            }
+
+                                            @media(min-width:460px) {
+                                              .pos-ctrl-grid {
+                                                grid-template-columns: 1fr 1fr;
+                                                gap: 14px
+                                              }
+                                            }
+
+                                            .ctrl-block label {
+                                              font-size: 12px;
+                                              color: var(--muted);
+                                              font-weight: 600;
+                                              display: block;
+                                              margin-bottom: 6px
+                                            }
+
+                                            .input-row {
+                                              display: flex;
+                                              gap: 6px
+                                            }
+
+                                            .ctrl-inp {
+                                              flex: 1;
+                                              padding: 10px;
+                                              background: var(--bg);
+                                              border: 1px solid var(--border);
+                                              border-radius: 8px;
+                                              color: var(--text);
+                                              font-size: 14px;
+                                              outline: none;
+                                              min-height: 42px;
+                                              /* touch-friendly */
+                                            }
+
+                                            .ctrl-inp:focus {
+                                              border-color: var(--blue)
+                                            }
+
+                                            .ctrl-btn {
+                                              padding: 10px 14px;
+                                              border: none;
+                                              border-radius: 8px;
+                                              font-size: 13px;
+                                              font-weight: 600;
+                                              cursor: pointer;
+                                              min-height: 42px;
+                                              white-space: nowrap;
+                                            }
+
+                                            .ctrl-btn.red {
+                                              background: rgba(239, 68, 68, .15);
+                                              color: var(--red);
+                                              border: 1px solid var(--red)
+                                            }
+
+                                            .ctrl-btn.green {
+                                              background: rgba(34, 197, 94, .15);
+                                              color: var(--green);
+                                              border: 1px solid var(--green)
+                                            }
+
+                                            .ctrl-hint {
+                                              font-size: 12px;
+                                              color: var(--muted);
+                                              margin-top: 4px
+                                            }
+
+                                            .btn-squareoff {
+                                              width: 100%;
+                                              padding: 13px;
+                                              background: linear-gradient(135deg, #ef4444, #b91c1c);
+                                              color: #fff;
+                                              border: none;
+                                              border-radius: 8px;
+                                              font-size: 14px;
+                                              font-weight: 700;
+                                              cursor: pointer;
+                                              letter-spacing: .5px;
+                                              transition: opacity .2s;
+                                              min-height: 46px;
+                                            }
+
+                                            .btn-squareoff:hover {
+                                              opacity: .88
+                                            }
+
+                                            .badge-live {
+                                              padding: 3px 10px;
+                                              border-radius: 20px;
+                                              font-size: 11px;
+                                              font-weight: 600;
+                                              background: rgba(34, 197, 94, .15);
+                                              color: var(--green)
+                                            }
+
+                                            .badge-paper {
+                                              background: rgba(245, 158, 11, .15);
+                                              color: #f59e0b;
+                                              padding: 3px 10px;
+                                              border-radius: 20px;
+                                              font-size: 11px;
+                                              font-weight: 600
+                                            }
+
+                                            /* ── Live Feed ── */
+                                            .feed-card {
+                                              flex: 1
+                                            }
+
+                                            #feed-log {
+                                              height: 240px;
+                                              overflow-y: auto;
+                                              font-size: 12px;
+                                              font-family: monospace;
+                                              -webkit-overflow-scrolling: touch;
+                                            }
+
+                                            @media(min-width:860px) {
+                                              #feed-log {
+                                                height: 300px;
+                                              }
+                                            }
+
+                                            .feed-line {
+                                              padding: 5px 2px;
+                                              border-bottom: 1px solid rgba(51, 65, 85, .3);
+                                              display: flex;
+                                              align-items: flex-start;
+                                              gap: 8px;
+                                              line-height: 1.4
+                                            }
+
+                                            .feed-ts {
+                                              color: var(--muted);
+                                              flex-shrink: 0;
+                                              font-size: 11px;
+                                              padding-top: 1px
+                                            }
+
+                                            .feed-msg {
+                                              flex: 1;
+                                              word-break: break-word
+                                            }
+
+                                            .feed-entry .feed-msg {
+                                              color: var(--green)
+                                            }
+
+                                            .feed-exit-win .feed-msg {
+                                              color: var(--green);
+                                              font-weight: 600
+                                            }
+
+                                            .feed-exit-loss .feed-msg {
+                                              color: var(--red);
+                                              font-weight: 600
+                                            }
+
+                                            .feed-signal .feed-msg {
+                                              color: #a78bfa
+                                            }
+
+                                            .feed-trail .feed-msg {
+                                              color: #60a5fa
+                                            }
+
+                                            .feed-dir .feed-msg {
+                                              color: #f59e0b
+                                            }
+
+                                            .feed-error .feed-msg {
+                                              color: var(--red)
+                                            }
+
+                                            .feed-controls {
+                                              display: flex;
+                                              gap: 6px;
+                                              align-items: center
+                                            }
+
+                                            /* ── Voice Alerts ── */
+                                            .va-toggle {
+                                              position: relative;
+                                              display: inline-block;
+                                              width: 42px;
+                                              height: 24px;
+                                              flex-shrink: 0
+                                            }
+
+                                            .va-toggle input {
+                                              opacity: 0;
+                                              width: 0;
+                                              height: 0
+                                            }
+
+                                            .va-toggle-slider {
+                                              position: absolute;
+                                              cursor: pointer;
+                                              inset: 0;
+                                              background: var(--border);
+                                              border-radius: 24px;
+                                              transition: .2s
+                                            }
+
+                                            .va-toggle-slider::before {
+                                              content: "";
+                                              position: absolute;
+                                              width: 18px;
+                                              height: 18px;
+                                              left: 3px;
+                                              bottom: 3px;
+                                              background: #fff;
+                                              border-radius: 50%;
+                                              transition: .2s
+                                            }
+
+                                            .va-toggle input:checked+.va-toggle-slider {
+                                              background: var(--green)
+                                            }
+
+                                            .va-toggle input:checked+.va-toggle-slider::before {
+                                              transform: translateX(18px)
+                                            }
+
+                                            .va-body {
+                                              transition: opacity .2s
+                                            }
+
+                                            .va-body.va-disabled {
+                                              opacity: .4;
+                                              pointer-events: none
+                                            }
+
+                                            .va-row {
+                                              display: flex;
+                                              align-items: center;
+                                              gap: 10px;
+                                              margin-top: 12px;
+                                              flex-wrap: wrap
+                                            }
+
+                                            .va-row:first-child {
+                                              margin-top: 4px
+                                            }
+
+                                            .va-label {
+                                              font-size: 12px;
+                                              color: var(--muted);
+                                              font-weight: 600;
+                                              min-width: 52px
+                                            }
+
+                                            .va-range {
+                                              flex: 1;
+                                              min-width: 80px;
+                                              accent-color: var(--blue);
+                                              height: 20px
+                                            }
+
+                                            .va-val {
+                                              font-size: 12px;
+                                              color: var(--text);
+                                              min-width: 38px;
+                                              text-align: right
+                                            }
+
+                                            .va-events {
+                                              align-items: flex-start
+                                            }
+
+                                            .va-checks {
+                                              display: flex;
+                                              flex-wrap: wrap;
+                                              gap: 8px 12px;
+                                              flex: 1
+                                            }
+
+                                            .va-checks label {
+                                              display: flex;
+                                              align-items: center;
+                                              gap: 6px;
+                                              font-size: 12.5px;
+                                              color: var(--text);
+                                              cursor: pointer;
+                                              white-space: nowrap;
+                                              min-height: 28px;
+                                              /* touch target */
+                                            }
+
+                                            .va-checks input {
+                                              accent-color: var(--blue);
+                                              cursor: pointer;
+                                              width: 16px;
+                                              height: 16px
+                                            }
+
+                                            /* ── Upstox status box ── */
+                                            .upstox-status {
+                                              display: flex;
+                                              align-items: center;
+                                              gap: 8px;
+                                              padding: 10px 12px;
+                                              border-radius: 8px;
+                                              background: var(--card);
+                                              margin-bottom: 14px;
+                                              font-size: 13px
+                                            }
+
+                                            .upstox-status.ok {
+                                              border-left: 3px solid var(--green)
+                                            }
+
+                                            .upstox-status.warn {
+                                              border-left: 3px solid #f59e0b
+                                            }
+
+                                            .upstox-status.err {
+                                              border-left: 3px solid var(--red)
+                                            }
+
+                                            /* ── Misc ── */
+                                            .mini-btn {
+                                              padding: 6px 12px;
+                                              background: var(--bg);
+                                              border: 1px solid var(--border);
+                                              color: var(--muted);
+                                              border-radius: 6px;
+                                              cursor: pointer;
+                                              font-size: 11.5px;
+                                              text-decoration: none;
+                                              white-space: nowrap;
+                                              min-height: 30px;
+                                            }
+
+                                            .mini-sel {
+                                              padding: 6px 8px;
+                                              background: var(--bg);
+                                              border: 1px solid var(--border);
+                                              color: var(--muted);
+                                              border-radius: 6px;
+                                              font-size: 11.5px;
+                                              cursor: pointer;
+                                            }
+
+                                            .ws-dot {
+                                              font-size: 14px;
+                                              color: var(--red);
+                                              transition: color .3s;
+                                              flex-shrink: 0
+                                            }
+
+                                            .ws-dot.on {
+                                              color: var(--green)
+                                            }
+
+                                            .py16 {
+                                              padding: 16px 0
+                                            }
+
+                                            .muted {
+                                              color: var(--muted)
+                                            }
+
+                                            .center {
+                                              text-align: center
+                                            }
+
+                                            /* ── Mobile-specific overrides (≤480px) ── */
+                                            @media(max-width:480px) {
+                                              .stat-pill {
+                                                font-size: 11.5px;
+                                                padding: 5px 10px
+                                              }
+
+                                              .card {
+                                                padding: 14px 12px
+                                              }
+
+                                              .card-title {
+                                                font-size: 13.5px
+                                              }
+
+                                              .btn-green,
+                                              .btn-red,
+                                              .btn-amber,
+                                              .btn-blue {
+                                                padding: 11px 14px;
+                                                font-size: 13px
+                                              }
+
+                                              #feed-log {
+                                                height: 200px
+                                              }
+
+                                              .pos-table td {
+                                                font-size: 12px
+                                              }
+
+                                              .mini-val {
+                                                font-size: 17px
+                                              }
+
+                                              .va-label {
+                                                min-width: 44px;
+                                                font-size: 11.5px
+                                              }
+
+                                              .data-table {
+                                                font-size: 11.5px
+                                              }
+
+                                              .data-table th,
+                                              .data-table td {
+                                                padding: 7px 8px
+                                              }
+
+                                              #verify-banner,
+                                              #subscription-banner,
+                                              #trial-banner {
+                                                padding: 10px 12px !important;
+                                                font-size: 12px
+                                              }
+
+                                              #trial-banner>div[style*="flex:1"] {
+                                                max-width: 100% !important;
+                                                width: 100%
+                                              }
+                                            }
+                                          </style>
+
+                                          <script src="/static/js/voice-alerts.js"></script>
+                                          <script>
+                                            let ws = null;
+                                            let allFeedLines = [];
+                                            let activePositions = {};   // symbol → position data
+                                            let botPaused = false;
+
+                                            // ── Load config ──────────────────────────────────────────────────
+                                            async function loadConfig() {
+                                              const r = await apiFetch('/api/users/config');
+                                              if (!r || !r.ok) return;
+                                              const c = await r.json();
+                                              document.getElementById('d-symbol').textContent = c.underlying_symbol || '—';
+                                              document.getElementById('d-strategy').textContent = c.strategy || '—';
+                                              document.getElementById('d-qty').textContent = c.order_qty || '—';
+                                              document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-IN');
+
+                                              const isPaper = c.paper_mode !== false;
+                                              const modeEl = document.getElementById('d-mode');
+                                              modeEl.textContent = isPaper ? '📄 Paper' : '💰 Live';
+                                              modeEl.style.color = isPaper ? '#f59e0b' : '#22c55e';
+
+                                              if (c.extra_symbols) {
+                                                document.getElementById('extra-syms-pill').style.display = '';
+                                                document.getElementById('d-extra').textContent = c.extra_symbols;
+                                              }
+
+                                              // Show Telegram setup card if not configured
+                                              if (!c.telegram_bot_token || !c.telegram_chat_id) {
+                                                document.getElementById('tg-setup-card').style.display = '';
+                                              }
+
+                                              updateBotStatus(c.status === 'running');
+                                            }
+
+                                            // ── Bot control ──────────────────────────────────────────────────
+                                            async function startBot() {
+                                              const r = await apiFetch('/api/bot/start', { method: 'POST' });
+                                              if (!r) return;
+                                              const d = await r.json();
+                                              if (r.ok) {
+                                                addFeed('🟢 Bot started', 'signal');
+                                                updateBotStatus(true);
+                                              } else {
+                                                const errEl = document.getElementById('bot-err');
+                                                errEl.textContent = d.detail || 'Start failed';
+                                                errEl.style.display = 'block';
+                                                setTimeout(() => errEl.style.display = 'none', 5000);
+                                              }
+                                            }
+
+                                            async function stopBot() {
+                                              if (!confirm('Stop the bot? Open positions will NOT be automatically closed.')) return;
+                                              await apiFetch('/api/bot/stop', { method: 'POST' });
+                                              addFeed('🔴 Bot stopped', 'signal');
+                                              updateBotStatus(false);
+                                            }
+
+                                            async function pauseBot() {
+                                              const r = await apiFetch('/api/position/pause', { method: 'POST' });
+                                              if (r?.ok) {
+                                                botPaused = true;
+                                                addFeed('⏸ Trading paused — no new entries', 'trail');
+                                                document.getElementById('btn-pause').style.display = 'none';
+                                                document.getElementById('btn-resume').style.display = '';
+                                                document.getElementById('bot-badge').textContent = 'Paused';
+                                                document.getElementById('bot-badge').className = 'status-badge paused';
+                                              }
+                                            }
+
+                                            async function resumeBot() {
+                                              const r = await apiFetch('/api/position/resume', { method: 'POST' });
+                                              if (r?.ok) {
+                                                botPaused = false;
+                                                addFeed('▶ Trading resumed', 'signal');
+                                                document.getElementById('btn-pause').style.display = '';
+                                                document.getElementById('btn-resume').style.display = 'none';
+                                                document.getElementById('bot-badge').textContent = 'Running';
+                                                document.getElementById('bot-badge').className = 'status-badge running';
+                                              }
+                                            }
+
+                                            function updateBotStatus(running) {
+                                              const badge = document.getElementById('bot-badge');
+                                              badge.textContent = running ? (botPaused ? 'Paused' : 'Running') : 'Stopped';
+                                              badge.className = 'status-badge ' + (running ? (botPaused ? 'paused' : 'running') : '');
+                                              document.getElementById('btn-start').disabled = running;
+                                              document.getElementById('btn-stop').disabled = !running;
+                                              document.getElementById('btn-pause').disabled = !running;
+                                              if (!running) {
+                                                botPaused = false;
+                                                document.getElementById('btn-pause').style.display = '';
+                                                document.getElementById('btn-resume').style.display = 'none';
+                                              }
+                                            }
+
+                                            // ── Pending Trades (Semi Auto mode) ──────────────────────────────
+                                            async function loadPendingTrades() {
+                                              try {
+                                                const r = await apiFetch('/api/users/pending-trades');
+                                                if (!r || !r.ok) return;
+                                                const trades = await r.json();
+                                                const card = document.getElementById('pending-trades-card');
+                                                const body = document.getElementById('pending-trades-body');
+                                                const countEl = document.getElementById('pending-count');
+                                                if (!body) return;
+
+                                                // Show card only if there are pending trades or mode is SEMI_AUTO
+                                                const waiting = trades.filter(t => t.status === 'WAITING');
+                                                if (card) {
+                                                  card.style.display = (trades.length > 0) ? '' : 'none';
+                                                }
+                                                if (countEl) countEl.textContent = `${waiting.length} waiting`;
+
+                                                if (!trades.length) {
+                                                  body.innerHTML = '<div class="muted center py16">No pending trades</div>';
+                                                  return;
+                                                }
+
+                                                body.innerHTML = trades.map(t => {
+                                                  const isWaiting = t.status === 'WAITING';
+                                                  const expiresIn = t.expires_at ? timeUntilExpiry(t.expires_at) : '—';
+                                                  const statusBadge = {
+                                                    'WAITING': '<span class="badge-status waiting" style="color:#f59e0b">⏳ Pending</span>',
+                                                    'APPROVED': '<span class="badge-status approved" style="color:var(--green)">✅ Approved</span>',
+                                                    'REJECTED': '<span class="badge-status rejected" style="color:var(--red)">❌ Rejected</span>',
+                                                    'EXPIRED': '<span class="badge-status expired" style="color:var(--muted)">⏰ Expired</span>',
+                                                  }[t.status] || t.status;
+
+                                                  const actionsHtml = isWaiting ? `
+        <div class="pending-actions" style="display:flex;gap:6px;margin-top:8px">
+          <button class="mini-btn" style="color:var(--green);border-color:var(--green);font-weight:600"
+            onclick="approvePendingTrade(${t.id})">✅ Approve</button>
+          <button class="mini-btn" style="color:var(--red);border-color:var(--red)"
+            onclick="rejectPendingTrade(${t.id})">❌ Reject</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:4px">⏱ Expires in ${expiresIn}</div>
+      ` : '';
+
+                                                  return `<div class="pending-trade-item" style="padding:10px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;background:var(--card2,#1a2235)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
+          <div>
+            <b>${t.symbol}</b> ${t.opt_type || ''} · ${t.strategy || '—'}
+            <div class="muted" style="font-size:11px">Entry ₹${t.entry_price} · SL ₹${t.stop_loss} · Qty ${t.quantity}</div>
+            ${t.confidence ? `<div class="muted" style="font-size:11px">Confidence: ${t.confidence}%</div>` : ''}
+          </div>
+          <div style="text-align:right">
+            ${statusBadge}
+          </div>
+        </div>
+        ${actionsHtml}
+      </div>`;
+                                                }).join('');
+                                              } catch (e) {
+                                                console.error('loadPendingTrades:', e);
+                                              }
+                                            }
+
+                                            function timeUntilExpiry(expiresAt) {
+                                              try {
+                                                const now = new Date();
+                                                const exp = new Date(expiresAt.endsWith('Z') ? expiresAt : expiresAt + 'Z');
+                                                const diff = exp - now;
+                                                if (diff <= 0) return 'expired';
+                                                const sec = Math.floor(diff / 1000);
+                                                if (sec < 60) return `${sec}s`;
+                                                return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+                                              } catch (e) { return '—'; }
+                                            }
+
+                                            async function approvePendingTrade(tradeId) {
+                                              const r = await apiFetch(`/api/users/pending-trades/${tradeId}/approve`, { method: 'POST' });
+                                              const d = await r?.json() || {};
+                                              if (r?.ok) {
+                                                addFeed(`✅ Trade #${tradeId} approved — executing live order`, 'entry');
+                                                loadPendingTrades();
+                                              } else {
+                                                addFeed(`❌ Approval failed: ${d.detail || d.error || 'Unknown error'}`, 'error');
+                                              }
+                                            }
+
+                                            async function rejectPendingTrade(tradeId) {
+                                              if (!confirm(`Reject trade #${tradeId}?`)) return;
+                                              const r = await apiFetch(`/api/users/pending-trades/${tradeId}/reject`, { method: 'POST' });
+                                              if (r?.ok) {
+                                                addFeed(`❌ Trade #${tradeId} rejected`, 'signal');
+                                                loadPendingTrades();
+                                              } else {
+                                                addFeed(`❌ Rejection failed`, 'error');
+                                              }
+                                            }
+
+                                            // ── Position controls ────────────────────────────────────────────
+                                            async function modifySL() {
+                                              const val = parseFloat(document.getElementById('new-sl').value);
+                                              if (!val || isNaN(val)) { showCtrlMsg('Enter a valid SL price', 'error'); return; }
+                                              const r = await apiFetch('/api/position/sl', {
+                                                method: 'POST', body: JSON.stringify({ new_sl: val })
+                                              });
+                                              const d = await r?.json() || {};
+                                              if (r?.ok && d.changed?.length) {
+                                                document.getElementById('cur-sl').textContent = '₹' + val;
+                                                showCtrlMsg('✅ SL updated to ₹' + val, 'success');
+                                                addFeed(`📍 SL modified → ₹${val}`, 'trail');
+                                              } else {
+                                                showCtrlMsg('❌ ' + (d.errors?.[0] || d.detail || 'Failed'), 'error');
+                                              }
+                                            }
+
+                                            async function modifyTarget() {
+                                              const val = parseFloat(document.getElementById('new-target').value);
+                                              if (!val || isNaN(val)) { showCtrlMsg('Enter a valid target price', 'error'); return; }
+                                              const r = await apiFetch('/api/position/target', {
+                                                method: 'POST', body: JSON.stringify({ new_target: val })
+                                              });
+                                              const d = await r?.json() || {};
+                                              if (r?.ok && d.changed?.length) {
+                                                document.getElementById('cur-target').textContent = '₹' + val;
+                                                showCtrlMsg('✅ Target updated to ₹' + val, 'success');
+                                                addFeed(`🎯 Target modified → ₹${val}`, 'trail');
+                                              } else {
+                                                showCtrlMsg('❌ ' + (d.errors?.[0] || d.detail || 'Failed'), 'error');
+                                              }
+                                            }
+
+                                            async function squareOff() {
+                                              if (!confirm('⚡ Square off ALL open positions now?')) return;
+                                              const r = await apiFetch('/api/position/squareoff', { method: 'POST', body: '{}' });
+                                              const d = await r?.json() || {};
+                                              if (r?.ok) {
+                                                showCtrlMsg('✅ Square off executed', 'success');
+                                                addFeed('🔄 Manual square off executed', 'exit-loss');
+                                              } else {
+                                                showCtrlMsg('❌ ' + (d.detail || 'Failed'), 'error');
+                                              }
+                                            }
+
+                                            function showCtrlMsg(msg, cls) {
+                                              const el = document.getElementById('ctrl-msg');
+                                              el.textContent = msg;
+                                              el.className = 'msg ' + cls;
+                                              setTimeout(() => el.textContent = '', 5000);
+                                            }
+
+                                            // ── Render positions ─────────────────────────────────────────────
+                                            function renderPositions(positionsArr) {
+                                              const wrap = document.getElementById('positions-wrap');
+                                              const ctrl = document.getElementById('pos-ctrl-card');
+
+                                              const openPositions = positionsArr.filter(p => p.position);
+
+                                              if (!openPositions.length) {
+                                                wrap.innerHTML = '<div class="muted center py16">No active positions</div>';
+                                                ctrl.style.display = 'none';
+                                                return;
+                                              }
+
+                                              ctrl.style.display = '';
+                                              wrap.innerHTML = openPositions.map(p => {
+                                                const pos = p.position;
+                                                const pnl = p.unrealized_pnl;
+                                                const pnlCls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+                                                const pnlStr = pnl != null ? `${pnl >= 0 ? '+' : ''}₹${pnl}` : '—';
+                                                const mode = p.mode === 'paper' ? '📄' : '💰';
+
+                                                // Update control panel
+                                                document.getElementById('cur-sl').textContent = '₹' + pos.sl_trigger;
+                                                document.getElementById('cur-target').textContent = '₹' + pos.target;
+                                                const modeBadge = document.getElementById('pos-mode-badge');
+                                                modeBadge.textContent = p.mode === 'paper' ? '📄 PAPER' : '💰 LIVE';
+                                                modeBadge.className = p.mode === 'paper' ? 'badge-paper' : 'badge-live';
+
+                                                return `<div class="pos-card">
+      <div class="pos-header">
+        <span class="pos-sym">${mode} ${p.symbol} — ${p.trading_symbol || pos.trading_symbol || ''}</span>
+        <span class="${pnlCls}" style="font-size:15px">${pnlStr}</span>
+      </div>
+      <table class="pos-table">
+        <tr><td>Type</td><td><b>${pos.opt_type} ${pos.strike}</b></td></tr>
+        <tr><td>Entry</td><td>₹${pos.entry_price}</td></tr>
+        <tr><td>LTP</td><td>₹${p.opt_ltp || '—'}</td></tr>
+        <tr><td>SL</td><td style="color:var(--red)">₹${pos.sl_trigger}</td></tr>
+        <tr><td>Target</td><td style="color:var(--green)">₹${pos.target}</td></tr>
+        <tr><td>Qty</td><td>${pos.qty}</td></tr>
+        <tr><td>Strategy</td><td>${pos.strategy}</td></tr>
+      </table>
+    </div>`;
+                                              }).join('');
+                                            }
+
+                                            // ── Load positions from API ──────────────────────────────────────
+                                            async function loadPositions() {
+                                              const r = await apiFetch('/api/position/');
+                                              if (!r || !r.ok) return;
+                                              const d = await r.json();
+                                              renderPositions(d.positions || []);
+                                              // NOTE: "Today" trade count/P&L stats come from loadSummary()
+                                              // (DB-backed, /api/trades/summary?today=true) — that's the
+                                              // authoritative source. Previously this function also overwrote
+                                              // #t-trades from the live position snapshot's trades_today on
+                                              // every 5s poll, which caused the number to flicker against
+                                              // loadSummary()'s 30s-interval correct value. Removed.
+                                            }
+
+                                            // ── Summary from trade API ───────────────────────────────────────
+                                            async function loadSummary() {
+                                              const r = await apiFetch('/api/trades/summary?today=true');
+                                              if (!r || !r.ok) return;
+                                              const s = await r.json();
+                                              document.getElementById('t-trades').textContent = s.total;
+                                              document.getElementById('t-wins').textContent = s.winners;
+                                              const pnl = s.total_pnl;
+                                              const el = document.getElementById('t-pnl');
+                                              el.textContent = (pnl >= 0 ? '+' : '') + pnl;
+                                              el.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+                                              document.getElementById('t-wr').textContent = s.win_rate + '%';
+                                            }
+
+                                            async function loadTodayTrades() {
+                                              const r = await apiFetch('/api/trades/?today=true&limit=50');
+                                              if (!r || !r.ok) return;
+                                              const trades = await r.json();
+                                              const body = document.getElementById('today-trades-body');
+                                              if (!body) return;
+
+                                              if (!trades.length) {
+                                                body.innerHTML = '<tr><td colspan="7" class="muted center" style="padding:16px">No trades yet today</td></tr>';
+                                                return;
+                                              }
+                                              body.innerHTML = trades.map(t => {
+                                                const pnl = t.pnl != null ? t.pnl : null;
+                                                const pnlStr = pnl != null ? (pnl >= 0 ? '+' : '') + '₹' + pnl : '—';
+                                                const pnlCls = pnl >= 0 ? 'green' : 'red';
+                                                const modeTag = t.mode === 'paper' ? '📄' : '💰';
+                                                // entry_ts from API: "2026-06-24T09:23:45Z" — convert to IST for display
+                                                let timeStr = '—';
+                                                if (t.entry_ts) {
+                                                  try {
+                                                    // Strip microseconds if present: "...T09:23:45.123456Z" → "...T09:23:45Z"
+                                                    const clean = t.entry_ts.replace(/\.\d+Z$/, 'Z').replace(' ', 'T');
+                                                    const d = new Date(clean.endsWith('Z') ? clean : clean + 'Z');
+                                                    if (!isNaN(d.getTime())) {
+                                                      timeStr = d.toLocaleTimeString('en-IN', {
+                                                        hour: '2-digit', minute: '2-digit', hour12: false,
+                                                        timeZone: 'Asia/Kolkata'
+                                                      });
+                                                    } else {
+                                                      timeStr = t.entry_ts.slice(11, 16);
+                                                    }
+                                                  } catch (e) { timeStr = t.entry_ts.slice(11, 16); }
+                                                }
+                                                const statusBadge = {
+                                                  'TARGET': '<span class="badge badge-target">TARGET</span>',
+                                                  'SL': '<span class="badge badge-sl">SL</span>',
+                                                  'MANUAL_SQUAREOFF': '<span class="badge badge-manual">MANUAL</span>',
+                                                }[t.status] || t.status;
+                                                return `<tr>
+      <td class="muted">${timeStr}</td>
+      <td><b>${t.trading_symbol || '—'}</b> ${t.opt_type || ''} ${t.strike || ''}</td>
+      <td>₹${t.entry_price}</td>
+      <td>${t.exit_price ? '₹' + t.exit_price : '—'}</td>
+      <td class="${pnlCls}">${pnlStr}</td>
+      <td>${statusBadge}</td>
+      <td>${modeTag}</td>
+    </tr>`;
+                                              }).join('');
+                                            }
+
+                                            // ── WebSocket live feed ──────────────────────────────────────────
+                                            function connectWS() {
+                                              const uid = getUserId();   // decodes from JWT — no race with syncUserInfo()
+                                              const token = getToken();
+                                              if (!uid || !token) {
+                                                console.warn('connectWS: missing uid or token, retrying in 1s');
+                                                setTimeout(connectWS, 1000);
+                                                return;
+                                              }
+                                              const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                                              ws = new WebSocket(`${proto}://${location.host}/ws/${uid}?token=${token}`);
+
+                                              ws.onopen = () => {
+                                                document.getElementById('ws-dot').className = 'ws-dot on';
+                                              };
+                                              ws.onclose = () => {
+                                                document.getElementById('ws-dot').className = 'ws-dot';
+                                                setTimeout(connectWS, 3000);
+                                              };
+                                              ws.onmessage = e => {
+                                                try { handleEvent(JSON.parse(e.data)); } catch { }
+                                              };
+                                            }
+
+                                            function handleEvent(d) {
+                                              const sym = d.symbol || '';
+                                              VoiceAlerts.announce(d.event, d);
+                                              switch (d.event) {
+                                                case 'ENTRY':
+                                                  addFeed(`🟢 [${sym}] ENTRY ${d.trading_symbol} ${d.opt_type} ${d.strike} @ ₹${d.entry_price} | SL ₹${d.sl_trigger} | Target ₹${d.target} | ${d.strategy}`, 'entry');
+                                                  loadPositions();
+                                                  break;
+                                                case 'EXIT': {
+                                                  const win = d.pnl >= 0;
+                                                  const icon = d.status === 'TARGET' ? '🎯' : d.status === 'MANUAL_SQUAREOFF' ? '⚡' : '🛑';
+                                                  const sign = d.pnl >= 0 ? '+' : '';
+                                                  addFeed(`${icon} [${sym}] EXIT ${d.status} @ ₹${d.exit_price} | P&L ₹${sign}${d.pnl}`, win ? 'exit-win' : 'exit-loss');
+                                                  loadPositions();
+                                                  // Small delay before querying DB — the EXIT WS event is published
+                                                  // at the same time as the DB write starts; without a delay the API
+                                                  // query can arrive before the COMMIT completes and return 0 trades.
+                                                  setTimeout(() => { loadSummary(); loadTodayTrades(); }, 800);
+                                                  break;
+                                                }
+                                                case 'SL_TRAIL':
+                                                  addFeed(`📍 [${sym}] SL → ₹${d.new_sl} | LTP ₹${d.ltp}`, 'trail');
+                                                  document.getElementById('cur-sl').textContent = '₹' + d.new_sl;
+                                                  break;
+                                                case 'BOT_STATUS':
+                                                  updateBotStatus(d.status === 'running');
+                                                  if (d.error) {
+                                                    addFeed('⚠️ Bot error: ' + d.error, 'error');
+                                                    document.getElementById('bot-badge').className = 'status-badge error';
+                                                  }
+                                                  // Refresh pending trades on bot status change
+                                                  loadPendingTrades();
+                                                  break;
+                                                case 'SL_CANCEL':
+                                                  addFeed(`❎ [${sym}] SL Cancelled ₹${d.sl_trigger}${d.reason ? ' — ' + d.reason : ''}`, 'signal');
+                                                  break;
+                                                case 'DIRECTION_CHANGE':
+                                                  addFeed(`📡 [${sym}] Direction → ${d.direction} | ${d.opt_type} ${d.strike}`, 'dir');
+                                                  break;
+                                                case 'ORDER_ALERT':
+                                                  addFeed(`🚨 [${sym}] ORDER ALERT: ${d.reason}`, 'error');
+                                                  break;
+                                                case 'RISK_LIMIT_HIT':
+                                                  addFeed(`🚫 [${sym}] RISK LIMIT: ${d.reason} (value: ${d.value}) — no new entries today`, 'error');
+                                                  break;
+                                                case 'PENDING_TRADE':
+                                                  addFeed(`⏳ [${sym}] PENDING TRADE: ${d.trading_symbol || sym} ${d.opt_type || ''} @ ₹${d.entry_price} | Approve on dashboard${d.expires_at ? ' · expires ' + timeUntilExpiry(d.expires_at) : ''}`, 'signal');
+                                                  loadPendingTrades();
+                                                  break;
+                                                case 'SIGNAL_APPROVED':
+                                                  addFeed(`✅ [${sym}] Trade approved — executing live order`, 'entry');
+                                                  loadPendingTrades();
+                                                  break;
+                                                case 'ORDER_UPDATE': {
+                                                  const st = (d.status || '').toLowerCase();
+                                                  const icon = st === 'complete' ? '✅' : st === 'rejected' || st === 'cancelled' ? '❌' : st === 'trigger_pending' ? '⚡' : '📋';
+                                                  const msg = st === 'complete'
+                                                    ? `${icon} ${d.side || ''} ${d.qty_filled || ''} ${d.trading_symbol || sym} @ ₹${d.average_price} [${st}]`
+                                                    : `${icon} ${d.trading_symbol || sym} order ${st}${d.message ? ' — ' + d.message : ''}`;
+                                                  addFeed(msg, st === 'complete' ? 'signal' : st.includes('reject') || st.includes('cancel') ? 'error' : 'signal');
+                                                  break;
+                                                }
+                                              }
+                                            }
+
+                                            // ── Feed helpers ─────────────────────────────────────────────────
+                                            function addFeed(msg, type = '') {
+                                              const ts = new Date().toLocaleTimeString('en-IN');
+                                              allFeedLines.unshift({ msg, type, ts });
+                                              if (allFeedLines.length > 200) allFeedLines.pop();
+                                              renderFeed();
+                                            }
+
+                                            function renderFeed() {
+                                              const filter = document.getElementById('feed-filter').value;
+                                              const log = document.getElementById('feed-log');
+                                              const lines = filter === 'all' ? allFeedLines :
+                                                allFeedLines.filter(l => {
+                                                  if (filter === 'entry') return l.type === 'entry';
+                                                  if (filter === 'exit') return l.type.startsWith('exit');
+                                                  if (filter === 'signal') return l.type === 'signal' || l.type === 'dir';
+                                                  return true;
+                                                });
+                                              log.innerHTML = lines.slice(0, 80).map(l =>
+                                                `<div class="feed-line feed-${l.type}">
+       <span class="feed-ts">${l.ts}</span>
+       <span class="feed-msg">${l.msg}</span>
+     </div>`
+                                              ).join('');
+                                            }
+
+                                            function clearFeed() { allFeedLines = []; renderFeed(); }
+                                            function filterFeed() { renderFeed(); }
+
+                                            // ── Voice Alerts UI ────────────────────────────────────────────────
+                                            const VA_EVENT_KEYS = ['ENTRY', 'EXIT', 'SL_TRAIL', 'SL_CANCEL', 'BOT_STATUS', 'DIRECTION_CHANGE', 'ORDER_ALERT', 'ORDER_UPDATE', 'RISK_LIMIT_HIT'];
+
+                                            function vaInit() {
+                                              const s = VoiceAlerts.settings;
+
+                                              document.getElementById('va-enabled').checked = s.enabled;
+                                              document.getElementById('va-volume').value = Math.round((s.volume ?? 0.8) * 100);
+                                              document.getElementById('va-volume-val').textContent = Math.round((s.volume ?? 0.8) * 100) + '%';
+                                              document.getElementById('va-rate').value = s.rate ?? 1.0;
+                                              document.getElementById('va-rate-val').textContent = (s.rate ?? 1.0).toFixed(1) + 'x';
+                                              document.getElementById('va-gender').value = s.gender || 'auto';
+
+                                              VA_EVENT_KEYS.forEach(k => {
+                                                const el = document.getElementById('va-ev-' + k);
+                                                if (el) el.checked = s.events?.[k] !== false;
+                                              });
+
+                                              document.getElementById('va-body').classList.toggle('va-disabled', !s.enabled);
+                                            }
+
+                                            function vaUpdate() {
+                                              const events = {};
+                                              VA_EVENT_KEYS.forEach(k => {
+                                                const el = document.getElementById('va-ev-' + k);
+                                                if (el) events[k] = el.checked;
+                                              });
+
+                                              const volumePct = parseInt(document.getElementById('va-volume').value, 10);
+                                              const rate = parseFloat(document.getElementById('va-rate').value);
+
+                                              document.getElementById('va-volume-val').textContent = volumePct + '%';
+                                              document.getElementById('va-rate-val').textContent = rate.toFixed(1) + 'x';
+
+                                              const enabled = document.getElementById('va-enabled').checked;
+                                              document.getElementById('va-body').classList.toggle('va-disabled', !enabled);
+
+                                              VoiceAlerts.set({
+                                                enabled,
+                                                volume: volumePct / 100,
+                                                rate,
+                                                gender: document.getElementById('va-gender').value,
+                                                events,
+                                              });
+                                            }
+
+                                            function vaTest() {
+                                              // Test should speak even if the master toggle is off, so the user
+                                              // can preview voice/volume/speed before enabling live alerts.
+                                              const wasEnabled = VoiceAlerts.settings.enabled;
+                                              if (!wasEnabled) VoiceAlerts.set({ enabled: true });
+                                              VoiceAlerts.test();
+                                              if (!wasEnabled) VoiceAlerts.set({ enabled: false });
+                                            }
+
+                                            // ── Push Notifications ───────────────────────────────────────────
+                                            let _pushSubscription = null;
+
+                                            function _urlBase64ToUint8Array(base64String) {
+                                              const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                                              const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+                                              const raw = window.atob(base64);
+                                              return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+                                            }
+
+                                            async function initPush() {
+                                              if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+                                              const r = await apiFetch('/api/push/vapid-public-key');
+                                              if (!r || !r.ok) return;
+                                              const { enabled, public_key } = await r.json();
+                                              if (!enabled) return;   // server hasn't configured VAPID keys — hide card
+
+                                              document.getElementById('push-card').style.display = '';
+                                              window._vapidPublicKey = public_key;
+
+                                              try {
+                                                const reg = await navigator.serviceWorker.register('/static/sw.js');
+                                                const sub = await reg.pushManager.getSubscription();
+                                                _pushSubscription = sub;
+                                                updatePushUI(!!sub);
+                                              } catch (e) {
+                                                console.warn('Service worker registration failed:', e);
+                                              }
+                                            }
+
+                                            function updatePushUI(subscribed) {
+                                              document.getElementById('btn-push-enable').style.display = subscribed ? 'none' : '';
+                                              document.getElementById('btn-push-disable').style.display = subscribed ? '' : 'none';
+                                              document.getElementById('btn-push-test').style.display = subscribed ? '' : 'none';
+                                              document.getElementById('push-status-text').textContent = subscribed
+                                                ? '✅ Push notifications enabled on this device'
+                                                : 'Not enabled on this device';
+                                            }
+
+                                            async function enablePush() {
+                                              if (Notification.permission === 'denied') {
+                                                showFeedMsg('Notifications are blocked for this site — enable them in your browser settings.');
+                                                return;
+                                              }
+                                              const perm = await Notification.requestPermission();
+                                              if (perm !== 'granted') {
+                                                showFeedMsg('Notification permission was not granted.');
+                                                return;
+                                              }
+                                              const reg = await navigator.serviceWorker.ready;
+                                              const sub = await reg.pushManager.subscribe({
+                                                userVisibleOnly: true,
+                                                applicationServerKey: _urlBase64ToUint8Array(window._vapidPublicKey),
+                                              });
+                                              const subJson = sub.toJSON();
+                                              await apiFetch('/api/push/subscribe', {
+                                                method: 'POST',
+                                                body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys }),
+                                              });
+                                              _pushSubscription = sub;
+                                              updatePushUI(true);
+                                              showFeedMsg('✅ Push notifications enabled');
+                                            }
+
+                                            async function disablePush() {
+                                              if (!_pushSubscription) return;
+                                              const endpoint = _pushSubscription.endpoint;
+                                              await _pushSubscription.unsubscribe();
+                                              await apiFetch('/api/push/unsubscribe', {
+                                                method: 'POST', body: JSON.stringify({ endpoint }),
+                                              });
+                                              _pushSubscription = null;
+                                              updatePushUI(false);
+                                              showFeedMsg('Push notifications disabled');
+                                            }
+
+                                            async function testPush() {
+                                              const r = await apiFetch('/api/push/test', { method: 'POST' });
+                                              if (r && r.ok) {
+                                                showFeedMsg('🔔 Test notification sent');
+                                              } else {
+                                                const err = await r?.json().catch(() => null);
+                                                showFeedMsg('❌ ' + (err?.detail || 'Failed to send test'));
+                                              }
+                                            }
+
+                                            function showFeedMsg(msg) {
+                                              addFeed(msg, 'signal');
+                                            }
+
+                                            // ── Google OAuth token extraction ─────────────────────────────────
+                                            // Google callback redirects to /dashboard?access_token=...&refresh_token=...
+                                            // We store them and clean the URL immediately.
+                                            function extractGoogleTokens() {
+                                              const p = new URLSearchParams(window.location.search);
+                                              const at = p.get('access_token');
+                                              const rt = p.get('refresh_token');
+                                              if (at && rt) {
+                                                localStorage.setItem('access_token', at);
+                                                localStorage.setItem('refresh_token', rt);
+                                                window.history.replaceState({}, '', '/dashboard');
+                                              }
+                                            }
+
+                                            // ── Email verification banner ─────────────────────────────────────
+                                            async function checkEmailVerified() {
+                                              const r = await apiFetch('/api/auth/me');
+                                              if (!r || !r.ok) return;
+                                              const user = await r.json();
+                                              // Never show for admins or Google-linked accounts
+                                              if (user.role === 'admin' || user.has_google) return;
+                                              if (!user.email_verified) {
+                                                const banner = document.getElementById('verify-banner');
+                                                if (banner) banner.style.display = 'flex';
+                                              }
+                                            }
+
+// ── Subscription status ────────────────────────────────────────
+                                            async function checkSubscriptionStatus() {
+                                              const r = await apiFetch('/api/subscription/me');
+                                              if (!r || !r.ok) return;
+                                              const s = await r.json();
+                                              const subCard = document.getElementById('sub-status-card');
+                                              const summary = document.getElementById('sub-status-summary');
+                                              const progressWrap = document.getElementById('sub-status-progress-wrap');
+                                              const progressBar = document.getElementById('sub-status-progress-bar');
+                                              const actions = document.getElementById('sub-status-actions');
+                                              const blocked = s.status === 'none' || s.status === 'expired' ||
+                                                s.status === 'cancelled' || s.status === 'suspended';
+
+                                              if (blocked) {
+                                                // Show subscription card + banner
+                                                if (subCard) subCard.style.display = '';
+                                                const banner = document.getElementById('subscription-banner');
+                                                const msgEl = document.getElementById('subscription-banner-msg');
+                                                if (msgEl) {
+                                                  msgEl.textContent = s.status === 'none'
+                                                    ? 'subscribe to a plan to start trading.'
+                                                    : `your subscription is ${s.status} — renew to resume trading.`;
+                                                }
+                                                if (banner) banner.style.display = 'flex';
+                                                if (summary) summary.innerHTML = `<span style="color:var(--red)">No active subscription</span>`;
+                                                if (progressWrap) progressWrap.style.display = 'none';
+                                                if (actions) actions.style.display = 'none';
+                                                return;
+                                              }
+
+                                              // Show subscription card only when ≤7 days remaining
+                                              const remaining = s.remaining_days;
+                                              const showCard = remaining != null && remaining <= 7;
+                                              if (subCard) subCard.style.display = showCard ? '' : 'none';
+
+                                              if (showCard && summary) {
+                                                const label = s.is_trial ? 'Free Trial' : (s.plan_name || 'Active');
+                                                summary.innerHTML = `<b>${label}</b> — ${remaining} day(s) remaining`;
+                                              }
+
+                                              // Progress bar: elapsed fraction of the current period (trial = 7 days)
+                                              if (showCard && progressWrap && progressBar && s.start_date && s.end_date) {
+                                                const start = new Date(s.start_date), end = new Date(s.end_date), now = new Date();
+                                                const totalMs = end - start, elapsedMs = now - start;
+                                                const pct = totalMs > 0 ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100))) : 0;
+                                                progressBar.style.width = pct + '%';
+                                                progressWrap.style.display = 'block';
+                                              } else if (progressWrap) {
+                                                progressWrap.style.display = 'none';
+                                              }
+
+                                              if (showCard && actions) actions.style.display = (s.status === 'active') ? 'flex' : 'none';
+                                              else if (actions) actions.style.display = 'none';
+
+                                              // Trial banner with progress bar (only while status === 'trial')
+                                              const trialBanner = document.getElementById('trial-banner');
+                                              if (trialBanner) {
+                                                if (s.is_trial) {
+                                                  const detail = document.getElementById('trial-banner-detail');
+                                                  const tProgress = document.getElementById('trial-banner-progress');
+                                                  if (detail) detail.textContent = `${remaining} day(s) remaining · Expires ${(s.end_date || '').slice(0, 10)} · Paper trading only`;
+                                                  if (tProgress && s.start_date && s.end_date) {
+                                                    const start = new Date(s.start_date), end = new Date(s.end_date), now = new Date();
+                                                    const totalMs = end - start, elapsedMs = now - start;
+                                                    const pct = totalMs > 0 ? Math.min(100, Math.max(0, Math.round((elapsedMs / totalMs) * 100))) : 0;
+                                                    tProgress.style.width = pct + '%';
+                                                  }
+                                                  trialBanner.style.display = 'flex';
+                                                } else {
+                                                  trialBanner.style.display = 'none';
+                                                }
+                                              }
+                                              // Load manual payment pending status regardless
+                                              loadPaymentStatus();
+                                            }
+
+                                            // ── Manual Payment Status (shows pending verification card) ─────
+                                            async function loadPaymentStatus() {
+                                              try {
+                                                const r = await apiFetch('/api/payment/manual/my-payments');
+                                                if (!r || !r.ok) return;
+                                                const payments = await r.json();
+                                                const card = document.getElementById('payment-pending-card');
+                                                const body = document.getElementById('payment-pending-body');
+                                                if (!card || !body) return;
+
+                                                // Only show pending payments
+                                                const pending = payments.filter(p => p.status === 'pending');
+                                                if (!pending.length) {
+                                                  card.style.display = 'none';
+                                                  return;
+                                                }
+
+                                                card.style.display = '';
+                                                body.innerHTML = pending.map(p => {
+                                                  const badgeCls = p.status === 'approved' || p.status === 'success' ? 'active' : 
+                                                                   p.status === 'rejected' ? 'cancelled' : 'trial';
+                                                  return `<div style="padding:12px;margin-bottom:10px;border:1px solid var(--border);border-radius:10px;background:var(--card2,#1a2235)">
+                                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                                                      <div>
+                                                        <b>${p.plan_name || 'Plan'}</b>
+                                                        <div class="muted" style="font-size:12px">₹${Number(p.total_amount || 0).toFixed(2)} · UTR: ${p.utr_number || '—'}</div>
+                                                        <div class="muted" style="font-size:11px">${p.created_at ? p.created_at.slice(0,10) : '—'}</div>
+                                                        ${p.remarks ? `<div style="font-size:12px;color:var(--red);margin-top:4px">Remark: ${p.remarks}</div>` : ''}
+                                                      </div>
+                                                      <div><span class="status-pill ${badgeCls}">${p.status === 'pending' ? 'Pending Verification' : p.status}</span></div>
+                                                    </div>
+                                                    ${p.status === 'rejected' ? `<div style="margin-top:10px"><a href="/billing" class="mini-btn" style="background:var(--green);color:#fff;border:none">Submit New Payment</a></div>` : ''}
+                                                  </div>`;
+                                                }).join('');
+                                              } catch (e) {
+                                                console.error('loadPaymentStatus:', e);
+                                              }
+                                            }
+
+                                            // ── Init ─────────────────────────────────────────────────────────
+                                            document.addEventListener('DOMContentLoaded', () => {
+                                              extractGoogleTokens();   // must run before any apiFetch
+                                              const token = localStorage.getItem('access_token');
+                                              if (!token) { window.location.href = '/'; return; }
+                                              const dateEl = document.getElementById('today-date');
+                                              if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-IN',
+                                                { day: '2-digit', month: 'short', year: 'numeric' });
+loadConfig();
+                                              loadSummary();
+                                              loadTodayTrades();
+                                              loadPositions();
+                                              connectWS();
+                                              vaInit();
+                                              initPush();
+                                              checkEmailVerified();
+  checkSubscriptionStatus();
+  loadPendingTrades();
+  setInterval(loadPositions, 5000);
+  setInterval(loadPendingTrades, 10000);
+  setInterval(loadSummary, 30000);
+  setInterval(loadTodayTrades, 30000);
+  setInterval(loadPaymentStatus, 30000);
+                                            });
+                                          </script>
+                                          {% endblock %}

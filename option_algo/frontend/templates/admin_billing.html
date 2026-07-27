@@ -1,0 +1,1570 @@
+{% extends "base.html" %}
+{% block title %}Billing Admin — AlgoBot{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.11/css/dataTables.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.3/css/buttons.dataTables.min.css">
+<style>
+/* ============ Scoped SaaS admin shell — does not affect any other page ============ */
+.saas-shell{
+  --sb-bg:#0f172a; --sb-text:#94a3b8; --sb-active-bg:rgba(16,185,129,.12); --sb-active-text:#10b981;
+  --topbar-bg:#111827cc; --content-bg:#0a0f1e; --card-bg:#111827; --card-border:#1f2937;
+  --text:#e2e8f0; --muted:#94a3b8; --accent:#10b981; --accent2:#3b82f6; --danger:#ef4444; --warn:#f59e0b;
+  --shadow:0 4px 20px rgba(0,0,0,.35);
+  display:flex; align-items:stretch; min-height:100vh;
+  margin:-20px -24px; color:var(--text); font-family:inherit;
+}
+.saas-shell[data-theme="light"]{
+  --sb-bg:#ffffff; --sb-text:#475569; --topbar-bg:#ffffffcc; --content-bg:#f1f5f9;
+  --card-bg:#ffffff; --card-border:#e2e8f0; --text:#0f172a; --muted:#64748b;
+  --shadow:0 4px 16px rgba(15,23,42,.08);
+}
+.saas-shell *{box-sizing:border-box}
+.saas-shell a{text-decoration:none}
+
+/* Sidebar */
+.saas-sidebar{
+  width:260px; flex:0 0 260px; background:var(--sb-bg); border-right:1px solid var(--card-border);
+  position:sticky; top:0; height:100vh; overflow-y:auto; transition:width .25s ease; z-index:40;
+}
+.saas-sidebar.collapsed{width:76px; flex-basis:76px}
+.sb-brand{display:flex; align-items:center; gap:10px; padding:18px 20px; font-weight:800; font-size:18px; color:var(--text); white-space:nowrap; overflow:hidden}
+.sb-brand i{color:var(--accent); font-size:20px}
+.sb-nav{padding:8px 12px; display:flex; flex-direction:column; gap:2px}
+.sb-item{display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; color:var(--sb-text);
+  font-size:13.5px; font-weight:500; cursor:pointer; white-space:nowrap; overflow:hidden; transition:background .15s,color .15s}
+.sb-item i{width:18px; text-align:center; font-size:15px; flex-shrink:0}
+.sb-item:hover{background:rgba(148,163,184,.08); color:var(--text)}
+.sb-item.active{background:var(--sb-active-bg); color:var(--sb-active-text); font-weight:700}
+.sb-section-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); padding:14px 12px 4px; white-space:nowrap; overflow:hidden}
+.saas-sidebar.collapsed .sb-label, .saas-sidebar.collapsed .sb-brand-text, .saas-sidebar.collapsed .sb-section-label{display:none}
+.saas-sidebar.collapsed .sb-item{justify-content:center}
+
+/* Main + topbar */
+.saas-main{flex:1; min-width:0; display:flex; flex-direction:column; background:var(--content-bg)}
+.saas-topbar{position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:16px;
+  padding:12px 24px; background:var(--topbar-bg); backdrop-filter:blur(8px); border-bottom:1px solid var(--card-border)}
+.sb-toggle-btn{background:none; border:1px solid var(--card-border); color:var(--text); border-radius:8px; width:36px; height:36px; cursor:pointer}
+.topbar-search{flex:1; max-width:360px; position:relative}
+.topbar-search input{width:100%; padding:8px 12px 8px 34px; border-radius:10px; border:1px solid var(--card-border);
+  background:var(--card-bg); color:var(--text); font-size:13px; outline:none}
+.topbar-search i{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:12px}
+.topbar-spacer{flex:1}
+.topbar-icon-btn{position:relative; background:none; border:none; color:var(--text); font-size:17px; cursor:pointer; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center}
+.topbar-icon-btn:hover{background:rgba(148,163,184,.1)}
+.topbar-icon-btn .badge-dot{position:absolute; top:4px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--danger); border:2px solid var(--topbar-bg)}
+.theme-switch{position:relative; width:46px; height:26px; border-radius:20px; background:var(--card-border); cursor:pointer; border:none}
+.theme-switch .knob{position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:var(--accent); transition:left .2s; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px}
+.saas-shell[data-theme="light"] .theme-switch .knob{left:23px}
+.profile-chip{display:flex; align-items:center; gap:8px; cursor:pointer; padding:4px 8px; border-radius:10px}
+.profile-chip:hover{background:rgba(148,163,184,.1)}
+.profile-avatar{width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:#fff}
+
+.saas-content{padding:22px 26px 60px; flex:1}
+.breadcrumb-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px}
+.page-heading{font-size:22px; font-weight:800; margin:0}
+.crumb{font-size:12px; color:var(--muted)}
+.crumb b{color:var(--text)}
+
+.saas-view{display:none}
+.saas-view.active{display:block; animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)}}
+
+/* Stat cards */
+.stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px}
+@media(max-width:1100px){.stat-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.stat-grid{grid-template-columns:1fr}}
+.stat-card{background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; padding:18px;
+  display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow); transition:transform .2s,box-shadow .2s; cursor:default}
+.stat-card:hover{transform:translateY(-3px); box-shadow:0 10px 28px rgba(0,0,0,.4)}
+.stat-top{display:flex; align-items:center; justify-content:space-between}
+.stat-icon{width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:17px; color:#fff}
+.stat-trend{font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:20px; display:flex; align-items:center; gap:4px}
+.stat-trend.up{background:rgba(16,185,129,.15); color:#10b981}
+.stat-trend.down{background:rgba(239,68,68,.15); color:#ef4444}
+.stat-trend.flat{background:rgba(148,163,184,.15); color:var(--muted)}
+.stat-count{font-size:26px; font-weight:800; color:var(--text)}
+.stat-label{font-size:12.5px; color:var(--muted)}
+
+/* Generic card */
+.saas-card{background:var(--card-bg); border:1px solid var(--card-border); border-radius:14px; padding:18px; margin-bottom:20px; box-shadow:var(--shadow)}
+.saas-card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px}
+.saas-card-title{font-size:15px; font-weight:700; margin:0; display:flex; align-items:center; gap:8px}
+.saas-card-title i{color:var(--accent)}
+.grid-2{display:grid; grid-template-columns:1.4fr 1fr; gap:16px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+/* Buttons (Bootstrap-compatible, brand colored) */
+.btn-brand{background:linear-gradient(135deg,#10b981,#059669); border:none; color:#fff; font-weight:600}
+.btn-brand:hover{opacity:.9; color:#fff}
+.btn-brand2{background:linear-gradient(135deg,#3b82f6,#2563eb); border:none; color:#fff; font-weight:600}
+.btn-brand2:hover{opacity:.9; color:#fff}
+.btn-outline-soft{background:transparent; border:1px solid var(--card-border); color:var(--text)}
+.btn-outline-soft:hover{background:rgba(148,163,184,.1); color:var(--text)}
+
+/* Badges */
+.status-pill{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em}
+.status-pill.trial{background:rgba(59,130,246,.15); color:#3b82f6}
+.status-pill.active{background:rgba(16,185,129,.15); color:#10b981}
+.status-pill.expired{background:rgba(239,68,68,.15); color:#ef4444}
+.status-pill.cancelled{background:rgba(148,163,184,.15); color:#94a3b8}
+.status-pill.suspended{background:rgba(245,158,11,.15); color:#f59e0b}
+.status-pill.pending_payment{background:rgba(245,158,11,.15); color:#f59e0b}
+.status-pill.success{background:rgba(16,185,129,.15); color:#10b981}
+.status-pill.failed{background:rgba(239,68,68,.15); color:#ef4444}
+.status-pill.created{background:rgba(148,163,184,.15); color:#94a3b8}
+
+/* Pricing / plan cards */
+.plan-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px}
+.plan-card{background:var(--card-bg); border:1px solid var(--card-border); border-radius:16px; padding:20px; position:relative;
+  transition:transform .2s,box-shadow .2s; box-shadow:var(--shadow)}
+.plan-card:hover{transform:translateY(-4px); box-shadow:0 14px 30px rgba(0,0,0,.4)}
+.plan-card.inactive{opacity:.55}
+.plan-card h3{margin:0 0 4px; font-size:16px; font-weight:800}
+.plan-card .price{font-size:26px; font-weight:800; margin:8px 0 2px}
+.plan-card .price small{font-size:12px; font-weight:500; color:var(--muted)}
+.plan-symbols{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0}
+.symbol-badge{background:rgba(59,130,246,.12); color:#60a5fa; padding:3px 8px; border-radius:8px; font-size:11px; font-weight:600}
+.plan-actions{display:flex; gap:6px; flex-wrap:wrap; margin-top:14px}
+.plan-actions button{font-size:11.5px; padding:5px 9px}
+
+/* Table */
+.saas-table{width:100%; border-collapse:collapse; font-size:13px}
+.saas-table th{text-align:left; padding:10px 12px; color:var(--muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; border-bottom:1px solid var(--card-border)}
+.saas-table td{padding:11px 12px; border-bottom:1px solid var(--card-border)}
+.saas-table tr:last-child td{border-bottom:none}
+.avatar-sm{width:30px; height:30px; border-radius:50%; background:linear-gradient(135deg,#3b82f6,#8b5cf6); display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:11px; font-weight:700; margin-right:8px}
+.row-click{cursor:pointer}
+.row-click:hover{background:rgba(148,163,184,.05)}
+
+/* Skeleton shimmer */
+.skel{border-radius:8px; background:linear-gradient(90deg,rgba(148,163,184,.08) 25%,rgba(148,163,184,.18) 37%,rgba(148,163,184,.08) 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skel-line{height:14px; margin:6px 0}
+.skel-card{height:96px}
+
+/* Progress bar */
+.saas-progress{height:8px; border-radius:6px; background:rgba(148,163,184,.15); overflow:hidden}
+.saas-progress-bar{height:100%; background:linear-gradient(90deg,#10b981,#3b82f6); border-radius:6px}
+
+/* Forms scoped to dark card bg */
+.saas-card input, .saas-card select, .saas-card textarea{background:var(--content-bg); color:var(--text); border:1px solid var(--card-border)}
+.saas-card input:focus, .saas-card select:focus, .saas-card textarea:focus{border-color:var(--accent); box-shadow:none; background:var(--content-bg); color:var(--text)}
+.saas-card label{font-size:12px; color:var(--muted); margin-bottom:4px}
+
+/* Inline field validation (Bootstrap's native is-invalid/invalid-feedback pattern) */
+.saas-card .form-control.is-invalid, .saas-card .form-select.is-invalid{border-color:#ef4444}
+.saas-card .invalid-feedback{font-size:11px}
+.saas-card input:disabled, .saas-card button:disabled{opacity:.6; cursor:not-allowed}
+
+/* DataTables dark-theme overrides */
+.saas-shell table.dataTable{color:var(--text)}
+.saas-shell table.dataTable thead th{color:var(--muted); border-bottom:1px solid var(--card-border) !important}
+.saas-shell table.dataTable tbody td{border-top:1px solid var(--card-border) !important}
+.saas-shell .dataTables_wrapper .dataTables_filter input,
+.saas-shell .dataTables_wrapper .dataTables_length select{background:var(--content-bg); color:var(--text); border:1px solid var(--card-border); border-radius:6px; padding:4px 8px}
+.saas-shell .dataTables_wrapper .dataTables_info,
+.saas-shell .dataTables_wrapper .dataTables_paginate{color:var(--muted); font-size:12.5px}
+.saas-shell .dataTables_wrapper .dataTables_paginate .paginate_button{color:var(--text) !important; border-radius:6px}
+.saas-shell .dataTables_wrapper .dataTables_paginate .paginate_button.current{background:var(--accent) !important; color:#fff !important; border:none !important}
+.saas-shell .dt-buttons .btn{background:var(--card-bg); color:var(--text); border:1px solid var(--card-border); font-size:12px; margin-right:6px}
+
+/* Offcanvas / modal dark theme */
+.saas-shell ~ .offcanvas, .offcanvas.saas-offcanvas{background:var(--card-bg); color:var(--text)}
+.offcanvas.saas-offcanvas .offcanvas-header{border-bottom:1px solid var(--card-border)}
+.modal.saas-modal .modal-content{background:var(--card-bg); color:var(--text); border:1px solid var(--card-border)}
+.nav-tabs.saas-tabs{border-bottom:1px solid var(--card-border)}
+.nav-tabs.saas-tabs .nav-link{color:var(--muted); border:none; font-size:13px}
+.nav-tabs.saas-tabs .nav-link.active{color:var(--accent); background:transparent; border-bottom:2px solid var(--accent)}
+
+/* Mobile sidebar */
+@media(max-width:991px){
+  .saas-sidebar{position:fixed; left:-280px; top:0; height:100vh; width:260px; transition:left .25s ease; box-shadow:0 0 40px rgba(0,0,0,.5)}
+  .saas-sidebar.mobile-open{left:0}
+  .sidebar-backdrop{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:39}
+  .sidebar-backdrop.show{display:block}
+  .topbar-search{display:none}
+}
+
+/* ============ Responsive hardening (320 / 375 / 390 / 414 / 768) ============ */
+.saas-shell, .saas-main, .saas-content{max-width:100%; overflow-x:hidden}
+.saas-card{overflow-x:auto}
+.saas-table{min-width:520px}
+@media(max-width:768px){
+  .saas-content{padding:16px 14px 50px}
+  .saas-topbar{padding:10px 14px; gap:8px}
+  .page-heading{font-size:18px}
+  .crumb{display:none}
+  .stat-grid{grid-template-columns:repeat(2,1fr); gap:10px}
+  .plan-grid{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+  .saas-card{padding:14px}
+}
+@media(max-width:480px){
+  .stat-grid{grid-template-columns:1fr}
+  .stat-card{padding:14px}
+  .breadcrumb-row{flex-direction:column; align-items:flex-start}
+  .breadcrumb-row .btn{width:100%}
+  .plan-card{padding:16px}
+  .sb-brand-text{font-size:15px}
+}
+/* Offcanvas drawer: fixed 460px width overflows narrow viewports */
+.offcanvas.saas-offcanvas{width:min(460px, 100vw) !important}
+/* Modals: never exceed the viewport width */
+.modal-dialog{margin-left:auto; margin-right:auto; max-width:calc(100vw - 24px)}
+@media(min-width:576px){.modal-dialog{max-width:500px}}
+@media(min-width:992px){.modal-dialog.modal-lg{max-width:800px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saas-shell" id="saasShell" data-theme="dark">
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+
+  <aside class="saas-sidebar" id="saasSidebar">
+    <div class="sb-brand"><i class="fa-solid fa-chart-line"></i><span class="sb-brand-text">AlgoBot Billing</span></div>
+    <nav class="sb-nav">
+      <div class="sb-item active" data-view="dashboard" onclick="showView('dashboard')"><i class="fa-solid fa-gauge-high"></i><span class="sb-label">Dashboard</span></div>
+      <div class="sb-item" data-view="users" onclick="showView('users')"><i class="fa-solid fa-users"></i><span class="sb-label">Users</span></div>
+      <div class="sb-item" data-view="subscriptions" onclick="showView('subscriptions')"><i class="fa-solid fa-id-card-clip"></i><span class="sb-label">Subscriptions</span></div>
+      <div class="sb-item" data-view="plans" onclick="showView('plans')"><i class="fa-solid fa-layer-group"></i><span class="sb-label">Subscription Plans</span></div>
+      <div class="sb-item" data-view="payments" onclick="showView('payments')"><i class="fa-solid fa-credit-card"></i><span class="sb-label">Payments</span></div>
+      <div class="sb-item" data-view="invoices" onclick="showView('invoices')"><i class="fa-solid fa-file-invoice"></i><span class="sb-label">Invoices</span></div>
+      <div class="sb-item" data-view="trial-users" onclick="showView('trial-users')"><i class="fa-solid fa-hourglass-half"></i><span class="sb-label">Trial Users</span></div>
+      <div class="sb-item" data-view="revenue" onclick="showView('revenue')"><i class="fa-solid fa-sack-dollar"></i><span class="sb-label">Revenue</span></div>
+      <div class="sb-item" data-view="reports" onclick="showView('reports')"><i class="fa-solid fa-chart-pie"></i><span class="sb-label">Reports</span></div>
+      <div class="sb-section-label">Payments</div>
+      <div class="sb-item" data-view="manual-payments" onclick="showView('manual-payments')"><i class="fa-solid fa-mobile-screen-button"></i><span class="sb-label">Manual Payments</span></div>
+      <div class="sb-item" data-view="payment-settings" onclick="showView('payment-settings')"><i class="fa-solid fa-sliders"></i><span class="sb-label">Payment Settings</span></div>
+      <div class="sb-section-label">Admin</div>
+      <div class="sb-item" data-view="settings" onclick="showView('settings')"><i class="fa-solid fa-gear"></i><span class="sb-label">Billing Settings</span></div>
+      <a href="/admin" class="sb-item"><i class="fa-solid fa-toolbox"></i><span class="sb-label">Operations Admin</span></a>
+      <div class="sb-item" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket"></i><span class="sb-label">Logout</span></div>
+    </nav>
+  </aside>
+
+  <div class="saas-main">
+    <header class="saas-topbar">
+      <button class="sb-toggle-btn" onclick="toggleSidebar()" title="Toggle sidebar"><i class="fa-solid fa-bars"></i></button>
+      <div class="topbar-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="globalSearch" placeholder="Search users by name, email, mobile..." oninput="onGlobalSearch()">
+      </div>
+      <div class="topbar-spacer"></div>
+      <button class="topbar-icon-btn" title="Notifications" onclick="showNotifications()">
+        <i class="fa-regular fa-bell"></i><span class="badge-dot" id="notifDot" style="display:none"></span>
+      </button>
+      <button class="theme-switch" id="themeSwitch" onclick="toggleTheme()" title="Toggle theme"><span class="knob"><i class="fa-solid fa-moon"></i></span></button>
+      <div class="dropdown">
+        <div class="profile-chip" data-bs-toggle="dropdown">
+          <div class="profile-avatar" id="profileAvatar">A</div>
+        </div>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><span class="dropdown-item-text" id="profileEmailText">—</span></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="/admin"><i class="fa-solid fa-toolbox me-2"></i>Operations Admin</a></li>
+          <li><a class="dropdown-item" href="#" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i>Logout</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <div class="saas-content">
+      <div class="breadcrumb-row">
+        <div>
+          <div class="crumb">Billing Admin / <b id="crumbCurrent">Dashboard</b></div>
+          <h1 class="page-heading" id="pageHeading">Dashboard</h1>
+        </div>
+        <button class="btn btn-sm btn-outline-soft" onclick="loadAll()"><i class="fa-solid fa-rotate me-1"></i> Refresh All</button>
+      </div>
+
+      <!-- ============ DASHBOARD ============ -->
+      <section class="saas-view active" id="view-dashboard">
+        <div class="stat-grid" id="statGrid"></div>
+        <div class="grid-2">
+          <div class="saas-card">
+            <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-chart-line"></i>Monthly Revenue</h2></div>
+            <canvas id="chartMonthlyRevenue" height="110"></canvas>
+          </div>
+          <div class="saas-card">
+            <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-chart-pie"></i>Subscription Distribution</h2></div>
+            <canvas id="chartSubDistribution" height="110"></canvas>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="saas-card">
+            <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-clock-rotate-left"></i>Recent Payments</h2></div>
+            <div id="recentPayments"></div>
+          </div>
+          <div class="saas-card">
+            <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-user-plus"></i>Latest Registrations</h2></div>
+            <div id="latestRegistrations"></div>
+          </div>
+        </div>
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-triangle-exclamation"></i>Upcoming Expirations (next 7 days)</h2></div>
+          <div id="upcomingExpirations"></div>
+        </div>
+      </section>
+
+      <!-- ============ USERS ============ -->
+      <section class="saas-view" id="view-users">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-users"></i>All Users</h2>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-soft" onclick="showView('leads')"><i class="fa-solid fa-bullhorn me-1"></i>Contact-Sales Leads</button>
+              <button class="btn btn-outline-soft" onclick="loadUsers()"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+          </div>
+          <table class="saas-table" id="usersTable" style="width:100%">
+            <thead><tr><th>User</th><th>Mobile</th><th>Trial Used</th><th>Subscription</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="saas-view" id="view-leads">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-bullhorn"></i>Contact-Sales Leads (Enterprise)</h2>
+            <button class="btn btn-sm btn-outline-soft" onclick="showView('users')"><i class="fa-solid fa-arrow-left me-1"></i>Back to Users</button>
+          </div>
+          <table class="saas-table" id="leadsTable" style="width:100%">
+            <thead><tr><th>Name</th><th>Contact</th><th>Message</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ SUBSCRIPTIONS ============ -->
+      <section class="saas-view" id="view-subscriptions">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-id-card-clip"></i>User Subscriptions</h2>
+            <button class="btn btn-sm btn-outline-soft" onclick="loadSubscriptions()"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <table class="saas-table" id="subsTable" style="width:100%">
+            <thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Period</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ SUBSCRIPTION PLANS ============ -->
+      <section class="saas-view" id="view-plans">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-layer-group"></i>Plan Editor</h2>
+            <button class="btn btn-sm btn-outline-soft" onclick="resetPlanForm()"><i class="fa-solid fa-plus me-1"></i>New Plan</button>
+          </div>
+          <form onsubmit="return savePlan(event)" novalidate>
+            <input type="hidden" id="plan-edit-id">
+            <div class="row g-2">
+              <div class="col-md-2">
+                <label>Plan Code</label>
+                <input class="form-control form-control-sm" id="plan-code" oninput="clearInvalid('plan-code')" required>
+                <div class="invalid-feedback" id="plan-code-err"></div>
+              </div>
+              <div class="col-md-2">
+                <label>Name</label>
+                <input class="form-control form-control-sm" id="plan-name" oninput="clearInvalid('plan-name')" required>
+                <div class="invalid-feedback" id="plan-name-err"></div>
+              </div>
+              <div class="col-md-2">
+                <label>Monthly Price</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="plan-price" oninput="clearInvalid('plan-price')">
+                <div class="invalid-feedback" id="plan-price-err"></div>
+              </div>
+              <div class="col-md-1"><label>GST %</label><input type="number" step="0.01" class="form-control form-control-sm" id="plan-gst" value="18"></div>
+              <div class="col-md-2"><label>Duration (days)</label><input type="number" class="form-control form-control-sm" id="plan-duration" value="30"></div>
+              <div class="col-md-3"><label>Description</label><input class="form-control form-control-sm" id="plan-desc"></div>
+            </div>
+            <div class="row g-2 align-items-end mt-1">
+              <div class="col-md-3"><label>Add Symbol</label>
+                <select class="form-select form-select-sm" id="plan-symbol-picker"></select>
+              </div>
+              <div class="col-md-2"><label>Lot Limit</label><input type="number" class="form-control form-control-sm" id="plan-symbol-lot" value="1"></div>
+              <div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-soft w-100" onclick="addPlanSymbol()">+ Add</button></div>
+              <div class="col-md-5" id="plan-symbol-draft"></div>
+            </div>
+            <div class="d-flex gap-3 align-items-center mt-3">
+              <div class="form-check"><input class="form-check-input" type="checkbox" id="plan-contact-sales"><label class="form-check-label">Contact Sales Only</label></div>
+              <div class="form-check"><input class="form-check-input" type="checkbox" id="plan-active" checked><label class="form-check-label">Active</label></div>
+              <button type="submit" class="btn btn-sm btn-brand ms-auto" id="plan-save-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save Plan</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-tags"></i>Plans</h2></div>
+          <div class="plan-grid" id="plansGrid"></div>
+        </div>
+
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-building"></i>Custom Subscriptions (Enterprise)</h2>
+          </div>
+          <form class="row g-2 align-items-end mb-3" onsubmit="return addCustomSub(event)" novalidate>
+            <div class="col-md-1">
+              <label>User ID</label>
+              <input type="number" class="form-control form-control-sm" id="cust-user-id" oninput="clearInvalid('cust-user-id')" required>
+              <div class="invalid-feedback" id="cust-user-id-err"></div>
+            </div>
+            <div class="col-md-2">
+              <label>Label</label>
+              <input class="form-control form-control-sm" id="cust-label" oninput="clearInvalid('cust-label')" required>
+              <div class="invalid-feedback" id="cust-label-err"></div>
+            </div>
+            <div class="col-md-1"><label>Price</label><input type="number" step="0.01" class="form-control form-control-sm" id="cust-price"></div>
+            <div class="col-md-1"><label>GST %</label><input type="number" step="0.01" class="form-control form-control-sm" id="cust-gst"></div>
+            <div class="col-md-2"><label>Duration (d)</label><input type="number" class="form-control form-control-sm" id="cust-duration" value="365"></div>
+            <div class="col-md-2"><label>Symbols (SYM:lots,...)</label><input class="form-control form-control-sm" id="cust-symbols" placeholder="NIFTY:5,BANKNIFTY:3"></div>
+            <div class="col-md-2"><label>Notes</label><input class="form-control form-control-sm" id="cust-notes"></div>
+            <div class="col-md-1"><button class="btn btn-sm btn-brand w-100" type="submit" id="cust-add-btn">Add</button></div>
+          </form>
+          <table class="saas-table" id="customSubsTable" style="width:100%">
+            <thead><tr><th>Label</th><th>User</th><th>Price</th><th>Symbols</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ PAYMENTS ============ -->
+      <section class="saas-view" id="view-payments">
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-credit-card"></i>Payments</h2></div>
+          <table class="saas-table" id="paymentsTable" style="width:100%">
+            <thead><tr><th>User</th><th>Order ID</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ INVOICES ============ -->
+      <section class="saas-view" id="view-invoices">
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-file-invoice"></i>Invoices</h2></div>
+          <table class="saas-table" id="invoicesTable" style="width:100%">
+            <thead><tr><th>Invoice #</th><th>User</th><th>Plan</th><th>Amount</th><th>Date</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ TRIAL USERS ============ -->
+      <section class="saas-view" id="view-trial-users">
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-hourglass-half"></i>Trial Users</h2></div>
+          <table class="saas-table" id="trialUsersTable" style="width:100%">
+            <thead><tr><th>User</th><th>Started</th><th>Expires</th><th>Actions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ REVENUE ============ -->
+      <section class="saas-view" id="view-revenue">
+        <div class="stat-grid" id="revenueStatGrid"></div>
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-chart-line"></i>Monthly Revenue</h2></div>
+          <canvas id="chartRevenue2" height="90"></canvas>
+        </div>
+        <div class="saas-card">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-table-list"></i>Revenue by Plan</h2></div>
+          <table class="saas-table"><thead><tr><th>Plan</th><th>Payments</th><th>Total</th></tr></thead><tbody id="revenueByPlan"></tbody></table>
+        </div>
+      </section>
+
+      <!-- ============ REPORTS ============ -->
+      <section class="saas-view" id="view-reports">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-chart-pie"></i>Summary Report</h2>
+            <button class="btn btn-sm btn-outline-soft" onclick="exportReportCsv()"><i class="fa-solid fa-file-csv me-1"></i>Export CSV</button>
+          </div>
+          <div class="grid-2">
+            <canvas id="chartReportTrialPaid" height="140"></canvas>
+            <table class="saas-table"><tbody id="reportSummaryTable"></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MANUAL PAYMENTS ============ -->
+      <section class="saas-view" id="view-manual-payments">
+        <div class="saas-card">
+          <div class="saas-card-head">
+            <h2 class="saas-card-title"><i class="fa-solid fa-mobile-screen-button"></i>Manual Payment Submissions</h2>
+            <button class="btn btn-sm btn-outline-soft" onclick="loadManualPayments()"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <table class="saas-table" id="manualPaymentsTable" style="width:100%">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Plan</th>
+                <th>Amount</th>
+                <th>UTR</th>
+                <th>Screenshot</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ PAYMENT SETTINGS ============ -->
+      <section class="saas-view" id="view-payment-settings">
+        <div class="saas-card" style="max-width:640px">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-sliders"></i>Payment Settings</h2></div>
+          <form onsubmit="return savePaymentSettings(event)" novalidate>
+            <div class="mb-4">
+              <label style="font-size:13px;font-weight:700;margin-bottom:8px;display:block">Current Payment Mode</label>
+              <div class="d-flex gap-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="payment_mode" id="pm-manual" value="MANUAL" onchange="onPaymentModeChange()">
+                  <label class="form-check-label" for="pm-manual">Manual Payment (PhonePe / UPI)</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="payment_mode" id="pm-razorpay" value="RAZORPAY" onchange="onPaymentModeChange()">
+                  <label class="form-check-label" for="pm-razorpay">Razorpay (Online Payment)</label>
+                </div>
+              </div>
+            </div>
+
+            <div id="manualPaymentConfig" style="display:none">
+              <hr style="border-color:var(--card-border)">
+              <h6 style="font-weight:700;margin-bottom:12px">Manual Payment Configuration</h6>
+              <div class="mb-3">
+                <label>UPI ID <span style="color:var(--danger)">*</span></label>
+                <input class="form-control form-control-sm" id="set-manual-upi-id" placeholder="e.g. merchant@upi" oninput="clearInvalid('set-manual-upi-id')">
+                <div class="invalid-feedback" id="set-manual-upi-id-err"></div>
+                <div class="text-muted small mt-1">The UPI ID / VPA where users will send payments.</div>
+              </div>
+              <div class="mb-3">
+                <label>QR Code Image Path</label>
+                <input class="form-control form-control-sm" id="set-manual-qr-path" placeholder="uploads/qr_code.png or https://...">
+                <div class="text-muted small mt-1">Path or URL to the PhonePe/UPI QR code image.</div>
+              </div>
+              <div class="mb-3">
+                <label>Payment Instructions</label>
+                <textarea class="form-control form-control-sm" id="set-manual-instructions" rows="4" placeholder="1. Open PhonePe / Google Pay / Paytm
+2. Scan the QR code or pay to the UPI ID
+3. Enter the amount shown on checkout
+4. Submit the UTR number for verification"></textarea>
+                <div class="text-muted small mt-1">Step-by-step instructions shown to users during checkout.</div>
+              </div>
+            </div>
+
+            <button class="btn btn-brand btn-sm mt-3" type="submit" id="payment-settings-save-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save Payment Settings</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============ SETTINGS ============ -->
+      <section class="saas-view" id="view-settings">
+        <div class="saas-card" style="max-width:520px">
+          <div class="saas-card-head"><h2 class="saas-card-title"><i class="fa-solid fa-gear"></i>Billing Settings</h2></div>
+          <form onsubmit="return saveBillingSettings(event)" novalidate>
+            <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="set-gst-enabled"><label class="form-check-label">GST Enabled</label></div>
+            <div class="mb-3"><label>Upgrade Mode</label>
+              <select class="form-select form-select-sm" id="set-upgrade-mode">
+                <option value="immediate">Immediate</option>
+                <option value="queued">Queued (after current period ends)</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label>Invoice Prefix</label>
+              <input class="form-control form-control-sm" id="set-invoice-prefix" oninput="clearInvalid('set-invoice-prefix')">
+              <div class="invalid-feedback" id="set-invoice-prefix-err"></div>
+            </div>
+            <button class="btn btn-brand btn-sm" type="submit" id="settings-save-btn"><i class="fa-solid fa-floppy-disk me-1"></i>Save Settings</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- User detail drawer -->
+<div class="offcanvas offcanvas-end saas-offcanvas" tabindex="-1" id="userDrawer">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title" id="drawerUserName">User</h5>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <ul class="nav nav-tabs saas-tabs mb-3" role="tablist">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-profile">Profile</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-billing">Billing</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-payments">Payments</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-invoices">Invoices</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sub">Subscription</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-perms">Permissions</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-audit">Audit Log</button></li>
+    </ul>
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="tab-profile"></div>
+      <div class="tab-pane fade" id="tab-billing"></div>
+      <div class="tab-pane fade" id="tab-payments"></div>
+      <div class="tab-pane fade" id="tab-invoices"></div>
+      <div class="tab-pane fade" id="tab-sub"></div>
+      <div class="tab-pane fade" id="tab-perms"></div>
+      <div class="tab-pane fade" id="tab-audit"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Payment details modal -->
+<div class="modal saas-modal" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Payment Details</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="paymentModalBody"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.3/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.3/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.3/js/buttons.print.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+// ================================================================
+// Billing Admin — premium UI only. Every fetch below hits the exact
+// same /api/admin/billing/* endpoints as the previous plain-HTML
+// version; no request/response shape has changed.
+// ================================================================
+
+async function checkAdminAccess() {
+  const token = localStorage.getItem('access_token');
+  if (!token) { window.location.href = '/'; return false; }
+  const user = await syncUserInfo();
+  if (!user) { window.location.href = '/'; return false; }
+  if (user.role !== 'admin') { window.location.href = '/dashboard'; return false; }
+  document.getElementById('profileAvatar').textContent = (user.full_name || user.email || 'A')[0].toUpperCase();
+  document.getElementById('profileEmailText').textContent = user.email;
+  return true;
+}
+
+// ── Sidebar / topbar chrome ──────────────────────────────────────
+const VIEW_TITLES = {
+  dashboard: 'Dashboard', users: 'Users', leads: 'Contact-Sales Leads', subscriptions: 'Subscriptions',
+  plans: 'Subscription Plans', payments: 'Payments', invoices: 'Invoices', 'trial-users': 'Trial Users',
+  revenue: 'Revenue', reports: 'Reports', settings: 'Billing Settings',
+  'manual-payments': 'Manual Payments', 'payment-settings': 'Payment Settings',
+};
+
+function showView(view) {
+  document.querySelectorAll('.saas-view').forEach(v => v.classList.remove('active'));
+  const target = document.getElementById('view-' + view);
+  if (target) target.classList.add('active');
+  document.querySelectorAll('.sb-item[data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+  document.getElementById('pageHeading').textContent = VIEW_TITLES[view] || view;
+  document.getElementById('crumbCurrent').textContent = VIEW_TITLES[view] || view;
+  closeMobileSidebar();
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('saasSidebar');
+  if (window.innerWidth <= 991) {
+    sb.classList.toggle('mobile-open');
+    document.getElementById('sidebarBackdrop').classList.toggle('show', sb.classList.contains('mobile-open'));
+  } else {
+    sb.classList.toggle('collapsed');
+  }
+}
+function closeMobileSidebar() {
+  document.getElementById('saasSidebar').classList.remove('mobile-open');
+  document.getElementById('sidebarBackdrop').classList.remove('show');
+}
+
+function toggleTheme() {
+  const shell = document.getElementById('saasShell');
+  const next = shell.dataset.theme === 'dark' ? 'light' : 'dark';
+  shell.dataset.theme = next;
+  localStorage.setItem('billing_admin_theme', next);
+}
+
+function showNotifications() {
+  const items = [];
+  (window.__upcomingExpirations || []).slice(0, 5).forEach(s =>
+    items.push(`<div class="text-start mb-2"><b>${s.user_name || s.user_email}</b><br><span class="text-muted small">expires ${s.end_date.slice(0,10)}</span></div>`));
+  Swal.fire({
+    title: 'Notifications', html: items.join('') || '<span class="text-muted">No new notifications</span>',
+    confirmButtonText: 'Close', background: '#111827', color: '#e2e8f0',
+  });
+}
+
+function onGlobalSearch() {
+  const q = document.getElementById('globalSearch').value.trim();
+  showView('users');
+  loadUsers(q);
+}
+
+const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2600, timerProgressBar: true, background: '#111827', color: '#e2e8f0' });
+
+// ── Inline field validation (Bootstrap is-invalid / invalid-feedback) ──
+function markInvalid(fieldId, message) {
+  const input = document.getElementById(fieldId);
+  const err = document.getElementById(fieldId + '-err');
+  if (input) input.classList.add('is-invalid');
+  if (err) err.textContent = message;
+}
+function clearInvalid(fieldId) {
+  const input = document.getElementById(fieldId);
+  const err = document.getElementById(fieldId + '-err');
+  if (input) input.classList.remove('is-invalid');
+  if (err) err.textContent = '';
+}
+function clearInvalidAll(fieldIds) { fieldIds.forEach(clearInvalid); }
+
+// Formats a FastAPI error response into a human-readable string — handles
+// both a plain string `detail` and Pydantic's structured 422 error array.
+function formatApiError(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map(e => {
+      const field = Array.isArray(e.loc) ? e.loc[e.loc.length - 1] : 'field';
+      return `${field}: ${e.msg}`;
+    }).join('; ');
+  }
+  return fallback;
+}
+async function withButtonBusy(btnId, busyText, fn) {
+  const btn = document.getElementById(btnId);
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = busyText; }
+  try { return await fn(); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = orig; } }
+}
+
+function fmtMoney(n) { return 'Rs. ' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(s) { return s ? s.slice(0, 10) : '-'; }
+function initials(name, email) { const s = (name || email || '?').trim(); return s[0] ? s[0].toUpperCase() : '?'; }
+function animateCount(el, target) {
+  let cur = 0; const step = Math.max(1, Math.ceil(target / 30));
+  const t = setInterval(() => { cur += step; if (cur >= target) { cur = target; clearInterval(t); } el.textContent = cur.toLocaleString('en-IN'); }, 16);
+}
+
+// ── Global state (populated by loadAll) ─────────────────────────
+let allUsers = [], allPlans = [], allCustomSubs = [], allLeads = [], allSubscriptions = [],
+    allPayments = [], allInvoices = [], allStreamerSymbols = [], planSymbolDraft = [];
+let dtUsers, dtPayments, dtInvoices;
+
+async function loadAll() {
+  await Promise.all([
+    loadStreamerSymbolsForPicker(), loadPlans(), loadCustomSubs(), loadLeads(),
+    loadSubscriptions(), loadPayments(), loadInvoices(), loadUsers(), loadBillingSettings(),
+    loadManualPayments(), loadPaymentSettings(),
+  ]);
+  renderDashboard();
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────
+function renderDashboard() {
+  const totalUsers = allUsers.length;
+  const trialCount = allSubscriptions.filter(s => s.status === 'trial').length;
+  const activeCount = allSubscriptions.filter(s => s.status === 'active').length;
+  const expiredCount = allSubscriptions.filter(s => s.status === 'expired').length;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRevenue = allPayments.filter(p => p.status === 'success' && (p.paid_at || p.created_at || '').slice(0, 10) === today)
+    .reduce((s, p) => s + Number(p.total_amount || 0), 0);
+  const monthPrefix = new Date().toISOString().slice(0, 7);
+  const monthRevenue = allPayments.filter(p => p.status === 'success' && (p.paid_at || p.created_at || '').slice(0, 7) === monthPrefix)
+    .reduce((s, p) => s + Number(p.total_amount || 0), 0);
+  const pendingPayments = allPayments.filter(p => ['created', 'pending'].includes(p.status)).length;
+  const successPayments = allPayments.filter(p => p.status === 'success').length;
+
+  const cards = [
+    { icon: 'fa-users', color: '#3b82f6', label: 'Total Users', value: totalUsers },
+    { icon: 'fa-hourglass-half', color: '#f59e0b', label: 'Trial Users', value: trialCount },
+    { icon: 'fa-circle-check', color: '#10b981', label: 'Active Subscribers', value: activeCount },
+    { icon: 'fa-circle-xmark', color: '#ef4444', label: 'Expired Subscribers', value: expiredCount },
+    { icon: 'fa-sack-dollar', color: '#10b981', label: "Today's Revenue", value: todayRevenue, money: true },
+    { icon: 'fa-chart-line', color: '#3b82f6', label: 'Monthly Revenue', value: monthRevenue, money: true },
+    { icon: 'fa-clock', color: '#f59e0b', label: 'Pending Payments', value: pendingPayments },
+    { icon: 'fa-receipt', color: '#10b981', label: 'Successful Payments', value: successPayments },
+    { icon: 'fa-file-invoice', color: '#8b5cf6', label: 'Total Invoices', value: allInvoices.length },
+  ];
+  renderStatGrid('statGrid', cards);
+
+  renderMonthlyRevenueChart('chartMonthlyRevenue');
+  renderSubDistributionChart('chartSubDistribution');
+
+  document.getElementById('recentPayments').innerHTML = renderMiniList(
+    [...allPayments].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 5),
+    p => `<div class="d-flex justify-content-between py-2 border-bottom" style="border-color:var(--card-border)!important">
+      <span>${fmtMoney(p.total_amount)}</span><span class="status-pill ${p.status}">${p.status}</span></div>`);
+
+  document.getElementById('latestRegistrations').innerHTML = renderMiniList(
+    [...allUsers].slice(0, 5),
+    u => `<div class="d-flex align-items-center gap-2 py-2 border-bottom" style="border-color:var(--card-border)!important">
+      <div class="avatar-sm">${initials(u.full_name, u.email)}</div>
+      <div><div>${u.full_name || '(no name)'}</div><div class="text-muted small">${u.email}</div></div></div>`);
+
+  const now = new Date(); const in7 = new Date(now.getTime() + 7 * 86400000);
+  window.__upcomingExpirations = allSubscriptions.filter(s => {
+    const end = new Date(s.end_date); return ['trial', 'active'].includes(s.status) && end >= now && end <= in7;
+  }).sort((a, b) => a.end_date.localeCompare(b.end_date));
+  document.getElementById('notifDot').style.display = window.__upcomingExpirations.length ? 'block' : 'none';
+  document.getElementById('upcomingExpirations').innerHTML = window.__upcomingExpirations.length
+    ? `<table class="saas-table"><thead><tr><th>User</th><th>Status</th><th>Expires</th></tr></thead><tbody>${
+        window.__upcomingExpirations.map(s => `<tr><td>${s.user_name || s.user_email}</td><td><span class="status-pill ${s.status}">${s.status}</span></td><td>${fmtDate(s.end_date)}</td></tr>`).join('')
+      }</tbody></table>`
+    : '<div class="text-muted small py-3 text-center">Nothing expiring in the next 7 days</div>';
+}
+
+function renderMiniList(items, tpl) {
+  if (!items.length) return '<div class="text-muted small py-3 text-center">No data yet</div>';
+  return items.map(tpl).join('');
+}
+
+function renderStatGrid(elId, cards) {
+  const el = document.getElementById(elId);
+  el.innerHTML = cards.map((c, i) => `
+    <div class="stat-card">
+      <div class="stat-top">
+        <div class="stat-icon" style="background:${c.color}"><i class="fa-solid ${c.icon}"></i></div>
+      </div>
+      <div class="stat-count" id="stat-${elId}-${i}">${c.money ? fmtMoney(0) : 0}</div>
+      <div class="stat-label">${c.label}</div>
+    </div>`).join('');
+  cards.forEach((c, i) => {
+    const target = document.getElementById(`stat-${elId}-${i}`);
+    if (c.money) { target.textContent = fmtMoney(c.value); }
+    else animateCount(target, c.value);
+  });
+}
+
+let chartInstances = {};
+function destroyChart(id) { if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; } }
+
+function monthlySeriesFromPayments() {
+  const buckets = {};
+  allPayments.filter(p => p.status === 'success').forEach(p => {
+    const key = (p.paid_at || p.created_at || '').slice(0, 7);
+    if (!key) return;
+    buckets[key] = (buckets[key] || 0) + Number(p.total_amount || 0);
+  });
+  const keys = Object.keys(buckets).sort().slice(-6);
+  return { labels: keys, values: keys.map(k => buckets[k]) };
+}
+
+function renderMonthlyRevenueChart(canvasId) {
+  destroyChart(canvasId);
+  const { labels, values } = monthlySeriesFromPayments();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels.length ? labels : ['No data'], datasets: [{
+      label: 'Revenue', data: values.length ? values : [0], borderColor: '#10b981',
+      backgroundColor: 'rgba(16,185,129,.15)', tension: .35, fill: true, pointRadius: 3,
+    }] },
+    options: { plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.08)' } },
+                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,.08)' } } } },
+  });
+}
+
+function renderSubDistributionChart(canvasId) {
+  destroyChart(canvasId);
+  const counts = {};
+  allSubscriptions.forEach(s => { counts[s.status] = (counts[s.status] || 0) + 1; });
+  const labels = Object.keys(counts);
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  const palette = { trial: '#3b82f6', active: '#10b981', expired: '#ef4444', cancelled: '#94a3b8', suspended: '#f59e0b', pending_payment: '#f59e0b' };
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: labels.length ? labels : ['No data'], datasets: [{
+      data: labels.length ? labels.map(l => counts[l]) : [1],
+      backgroundColor: labels.length ? labels.map(l => palette[l] || '#64748b') : ['#334155'],
+      borderWidth: 0,
+    }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 10 } } } },
+  });
+}
+
+// ── Users + drawer ────────────────────────────────────────────────
+async function loadUsers(filterQ) {
+  const url = filterQ ? `/api/admin/billing/users?q=${encodeURIComponent(filterQ)}` : '/api/admin/billing/users';
+  const r = await apiFetch(url);
+  if (!r || !r.ok) return;
+  allUsers = await r.json();
+  renderUsersTable();
+}
+
+function renderUsersTable() {
+  const tbody = document.querySelector('#usersTable tbody');
+  tbody.innerHTML = allUsers.map(u => `
+    <tr class="row-click" onclick="openUserDrawer(${u.id})">
+      <td><div class="d-flex align-items-center"><div class="avatar-sm">${initials(u.full_name, u.email)}</div>
+        <div><div>${u.full_name || '(no name)'}</div><div class="text-muted small">${u.email}</div></div></div></td>
+      <td>${u.mobile_number || '-'}</td>
+      <td>${u.trial_used ? '<span class="status-pill cancelled">Used</span>' : '<span class="status-pill active">Available</span>'}</td>
+      <td>${u.subscription_status ? `<span class="status-pill ${u.subscription_status}">${u.subscription_status}</span>` : '<span class="text-muted">none</span>'}</td>
+      <td><button class="btn btn-sm btn-outline-soft" onclick="event.stopPropagation(); openUserDrawer(${u.id})"><i class="fa-solid fa-eye"></i></button></td>
+    </tr>`).join('');
+  if (dtUsers) { dtUsers.destroy(); }
+  dtUsers = $('#usersTable').DataTable({ pageLength: 10, lengthChange: false, searching: true, order: [] });
+}
+
+async function openUserDrawer(userId) {
+  const user = allUsers.find(u => u.id === userId);
+  if (!user) return;
+  document.getElementById('drawerUserName').textContent = user.full_name || user.email;
+
+  document.getElementById('tab-profile').innerHTML = `
+    <div class="mb-2"><b>Name:</b> ${user.full_name || '-'}</div>
+    <div class="mb-2"><b>Email:</b> ${user.email}</div>
+    <div class="mb-2"><b>Mobile:</b> ${user.mobile_number || '-'}</div>
+    <div class="mb-2"><b>Trial Used:</b> ${user.trial_used ? 'Yes' : 'No'}</div>
+    <div class="mb-2"><b>Current Subscription:</b> ${user.subscription_status || 'none'}</div>`;
+
+  document.getElementById('tab-billing').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+  document.getElementById('tab-payments').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+  document.getElementById('tab-invoices').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+  document.getElementById('tab-sub').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+  document.getElementById('tab-perms').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+  document.getElementById('tab-audit').innerHTML = '<div class="skel skel-line" style="width:80%"></div>';
+
+  new bootstrap.Offcanvas(document.getElementById('userDrawer')).show();
+
+  const bp = await (await apiFetch(`/api/admin/billing/users/${userId}/billing-profile`))?.json().catch(() => null);
+  document.getElementById('tab-billing').innerHTML = bp
+    ? `<div class="mb-1">${bp.address_line1}</div><div class="mb-1">${bp.address_line2 || ''}</div>
+       <div class="mb-1">${bp.city}, ${bp.state} ${bp.pincode}</div><div>${bp.country}</div>`
+    : '<div class="text-muted">No billing address on file</div>';
+
+  const userPayments = allPayments.filter(p => p.user_id === userId);
+  document.getElementById('tab-payments').innerHTML = userPayments.length
+    ? userPayments.map(p => `<div class="d-flex justify-content-between py-2 border-bottom" style="border-color:var(--card-border)!important">
+        <span>${fmtMoney(p.total_amount)}</span><span class="status-pill ${p.status}">${p.status}</span></div>`).join('')
+    : '<div class="text-muted">No payments</div>';
+
+  const userInvoices = allInvoices.filter(i => i.user_id === userId);
+  document.getElementById('tab-invoices').innerHTML = userInvoices.length
+    ? userInvoices.map(i => `<div class="d-flex justify-content-between py-2 border-bottom" style="border-color:var(--card-border)!important">
+        <span>${i.invoice_number}</span><button class="btn btn-sm btn-outline-soft" onclick="downloadInvoiceAdmin(${i.id})"><i class="fa-solid fa-download"></i></button></div>`).join('')
+    : '<div class="text-muted">No invoices</div>';
+
+  const userSub = allSubscriptions.find(s => s.user_id === userId);
+  document.getElementById('tab-sub').innerHTML = userSub
+    ? `<div class="mb-2"><b>Status:</b> <span class="status-pill ${userSub.status}">${userSub.status}</span></div>
+       <div class="mb-2"><b>Period:</b> ${fmtDate(userSub.start_date)} → ${fmtDate(userSub.end_date)}</div>`
+    : '<div class="text-muted">No subscription record</div>';
+
+  const plan = userSub && userSub.plan_id ? allPlans.find(p => p.id === userSub.plan_id) : null;
+  document.getElementById('tab-perms').innerHTML = plan
+    ? `<div class="mb-2">Trading permissions derived from plan <b>${plan.name}</b>:</div>
+       <div class="plan-symbols">${plan.symbols.map(s => `<span class="symbol-badge">${s.symbol} · max ${s.lot_limit} lot(s)</span>`).join('')}</div>`
+    : '<div class="text-muted">No plan-based trading permissions (trial = paper trading only, or no active plan)</div>';
+
+  const logs = await (await apiFetch(`/api/admin/billing/users/${userId}/audit-logs`))?.json().catch(() => []);
+  document.getElementById('tab-audit').innerHTML = (logs && logs.length)
+    ? logs.map(l => `<div class="py-2 border-bottom" style="border-color:var(--card-border)!important">
+        <div><b>${l.event_type}</b></div><div class="text-muted small">${l.description}</div>
+        <div class="text-muted small">${(l.created_at||'').replace('T',' ').slice(0,19)}</div></div>`).join('')
+    : '<div class="text-muted">No audit log entries</div>';
+}
+
+// ── Leads ─────────────────────────────────────────────────────────
+async function loadLeads() {
+  const r = await apiFetch('/api/admin/billing/leads');
+  if (!r || !r.ok) return;
+  allLeads = await r.json();
+  document.querySelector('#leadsTable tbody').innerHTML = allLeads.map(l => `
+    <tr><td>${l.name}</td><td>${l.email}${l.mobile_number ? '<br><span class="text-muted small">' + l.mobile_number + '</span>' : ''}</td>
+      <td>${l.message || '-'}</td>
+      <td><select class="form-select form-select-sm" onchange="updateLeadStatus(${l.id}, this.value)">
+        ${['new','contacted','converted','closed'].map(s => `<option value="${s}" ${s === l.status ? 'selected' : ''}>${s}</option>`).join('')}
+      </select></td>
+      <td>${fmtDate(l.created_at)}</td></tr>`).join('') ||
+    `<tr><td colspan="5" class="text-muted text-center py-3">No leads yet</td></tr>`;
+}
+async function updateLeadStatus(id, status) {
+  await apiFetch(`/api/admin/billing/leads/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+  toast.fire({ icon: 'success', title: 'Lead status updated' });
+}
+
+// ── Subscriptions ────────────────────────────────────────────────
+async function loadSubscriptions() {
+  const r = await apiFetch('/api/admin/billing/subscriptions');
+  if (!r || !r.ok) return;
+  allSubscriptions = await r.json();
+  renderSubscriptionsTable();
+  renderTrialUsersTable();
+}
+
+function renderSubscriptionsTable() {
+  document.querySelector('#subsTable tbody').innerHTML = allSubscriptions.map(s => `
+    <tr>
+      <td>${s.user_name || s.user_email || '#' + s.user_id}</td>
+      <td>${planNameById(s.plan_id)}</td>
+      <td><span class="status-pill ${s.status}">${s.status}</span></td>
+      <td>${fmtDate(s.start_date)} → ${fmtDate(s.end_date)}</td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-soft" onclick="extendSubPrompt(${s.id})" title="Extend"><i class="fa-solid fa-calendar-plus"></i></button>
+          <button class="btn btn-outline-soft" onclick="subAction(${s.id},'suspend')" title="Suspend"><i class="fa-solid fa-pause"></i></button>
+          <button class="btn btn-outline-soft" onclick="subAction(${s.id},'resume')" title="Resume"><i class="fa-solid fa-play"></i></button>
+          <button class="btn btn-outline-soft" onclick="subAction(${s.id},'cancel')" title="Cancel"><i class="fa-solid fa-ban"></i></button>
+        </div>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="5" class="text-muted text-center py-3">No subscriptions</td></tr>`;
+}
+
+function renderTrialUsersTable() {
+  const trials = allSubscriptions.filter(s => s.status === 'trial');
+  document.querySelector('#trialUsersTable tbody').innerHTML = trials.map(s => `
+    <tr><td>${s.user_name || s.user_email || '#' + s.user_id}</td><td>${fmtDate(s.start_date)}</td><td>${fmtDate(s.end_date)}</td>
+      <td><button class="btn btn-sm btn-brand" onclick="convertTrialPrompt(${s.id})"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Convert to Paid</button></td></tr>`
+  ).join('') || `<tr><td colspan="4" class="text-muted text-center py-3">No trial users</td></tr>`;
+}
+
+function planNameById(id) { const p = allPlans.find(x => x.id === id); return p ? p.name : '-'; }
+
+async function extendSubPrompt(id) {
+  const { value: days } = await Swal.fire({ title: 'Extend subscription', input: 'number', inputLabel: 'Days to add',
+    showCancelButton: true, background: '#111827', color: '#e2e8f0' });
+  if (!days) return;
+  const r = await apiFetch(`/api/admin/billing/subscriptions/${id}/extend`, { method: 'POST', body: JSON.stringify({ days: parseInt(days, 10) }) });
+  if (r?.ok) { toast.fire({ icon: 'success', title: `Extended by ${days} day(s)` }); loadSubscriptions(); }
+}
+
+async function subAction(id, action) {
+  const verbs = { suspend: 'Suspend', resume: 'Resume', cancel: 'Cancel' };
+  const confirm = await Swal.fire({
+    title: `${verbs[action]} this subscription?`, icon: 'warning', showCancelButton: true,
+    confirmButtonText: verbs[action], background: '#111827', color: '#e2e8f0', confirmButtonColor: '#10b981',
+  });
+  if (!confirm.isConfirmed) return;
+  const r = await apiFetch(`/api/admin/billing/subscriptions/${id}/${action}`, { method: 'POST' });
+  if (r?.ok) { toast.fire({ icon: 'success', title: `Subscription ${action}ed` }); loadSubscriptions(); }
+}
+
+async function convertTrialPrompt(id) {
+  const options = {}; allPlans.filter(p => !p.is_contact_sales).forEach(p => options[p.id] = `${p.name} (Rs. ${p.monthly_price})`);
+  const { value: planId } = await Swal.fire({
+    title: 'Convert trial to paid plan', input: 'select', inputOptions: options, inputPlaceholder: 'Select a plan',
+    showCancelButton: true, background: '#111827', color: '#e2e8f0',
+  });
+  if (!planId) return;
+  const r = await apiFetch(`/api/admin/billing/subscriptions/${id}/convert-trial`, { method: 'POST', body: JSON.stringify({ plan_id: parseInt(planId, 10) }) });
+  if (r?.ok) { toast.fire({ icon: 'success', title: 'Converted to paid plan' }); loadSubscriptions(); }
+  else { toast.fire({ icon: 'error', title: 'Failed to convert' }); }
+}
+
+// ── Plans ────────────────────────────────────────────────────────
+async function loadStreamerSymbolsForPicker() {
+  const r = await apiFetch('/api/admin/streamer-tokens');
+  if (!r || !r.ok) return;
+  allStreamerSymbols = await r.json();
+  document.getElementById('plan-symbol-picker').innerHTML = allStreamerSymbols.map(t => `<option value="${t.symbol}">${t.symbol}</option>`).join('');
+}
+
+function renderPlanSymbolDraft() {
+  document.getElementById('plan-symbol-draft').innerHTML = planSymbolDraft.map((s, idx) =>
+    `<span class="symbol-badge me-1">${s.symbol}: ${s.lot_limit} <a href="#" onclick="event.preventDefault(); removeDraftSymbol(${idx})" class="text-danger ms-1">×</a></span>`
+  ).join('') || '<span class="text-muted small">No symbols yet</span>';
+}
+function addPlanSymbol() {
+  const symbol = document.getElementById('plan-symbol-picker').value;
+  const lot = parseInt(document.getElementById('plan-symbol-lot').value, 10) || 1;
+  if (!symbol) return;
+  planSymbolDraft = planSymbolDraft.filter(s => s.symbol !== symbol);
+  planSymbolDraft.push({ symbol, lot_limit: lot });
+  renderPlanSymbolDraft();
+}
+function removeDraftSymbol(idx) { planSymbolDraft.splice(idx, 1); renderPlanSymbolDraft(); }
+
+function resetPlanForm() {
+  ['plan-edit-id','plan-code','plan-name','plan-price','plan-desc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('plan-gst').value = '18';
+  document.getElementById('plan-duration').value = '30';
+  document.getElementById('plan-contact-sales').checked = false;
+  document.getElementById('plan-active').checked = true;
+  planSymbolDraft = []; renderPlanSymbolDraft();
+}
+
+async function loadPlans() {
+  const r = await apiFetch('/api/admin/billing/plans');
+  if (!r || !r.ok) return;
+  allPlans = await r.json();
+  renderPlansGrid();
+}
+
+function renderPlansGrid() {
+  document.getElementById('plansGrid').innerHTML = allPlans.map(p => `
+    <div class="plan-card ${p.is_active ? '' : 'inactive'}">
+      <div class="d-flex justify-content-between">
+        <h3>${p.name}</h3>
+        <span class="status-pill ${p.is_active ? 'active' : 'cancelled'}">${p.is_active ? 'Active' : 'Inactive'}</span>
+      </div>
+      <div class="text-muted small">${p.plan_code}${p.description ? ' · ' + p.description : ''}</div>
+      <div class="price">${p.is_contact_sales ? 'Contact Sales' : fmtMoney(p.monthly_price)}${!p.is_contact_sales ? '<small>/mo + ' + p.gst_percentage + '% GST</small>' : ''}</div>
+      <div class="text-muted small">Duration: ${p.duration_days} days</div>
+      <div class="plan-symbols">${p.symbols.map(s => `<span class="symbol-badge">${s.symbol} · ${s.lot_limit} lot(s)</span>`).join('') || '<span class="text-muted small">No symbols configured</span>'}</div>
+      <div class="plan-actions">
+        <button class="btn btn-sm btn-outline-soft" onclick="editPlan(${p.id})"><i class="fa-solid fa-pen"></i> Edit</button>
+        <button class="btn btn-sm btn-outline-soft" onclick="duplicatePlan(${p.id})"><i class="fa-solid fa-copy"></i> Duplicate</button>
+        <button class="btn btn-sm btn-outline-soft" onclick="togglePlanActive(${p.id})"><i class="fa-solid fa-power-off"></i> ${p.is_active ? 'Disable' : 'Enable'}</button>
+        <button class="btn btn-sm btn-outline-soft text-danger" onclick="deletePlan(${p.id})"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>`).join('');
+}
+
+function editPlan(id) {
+  const p = allPlans.find(x => x.id === id); if (!p) return;
+  document.getElementById('plan-edit-id').value = p.id;
+  document.getElementById('plan-code').value = p.plan_code;
+  document.getElementById('plan-name').value = p.name;
+  document.getElementById('plan-price').value = p.monthly_price;
+  document.getElementById('plan-gst').value = p.gst_percentage;
+  document.getElementById('plan-duration').value = p.duration_days;
+  document.getElementById('plan-desc').value = p.description || '';
+  document.getElementById('plan-contact-sales').checked = p.is_contact_sales;
+  document.getElementById('plan-active').checked = p.is_active;
+  planSymbolDraft = p.symbols.map(s => ({ symbol: s.symbol, lot_limit: s.lot_limit }));
+  renderPlanSymbolDraft();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function duplicatePlan(id) {
+  const p = allPlans.find(x => x.id === id); if (!p) return;
+  editPlan(id);
+  document.getElementById('plan-edit-id').value = '';
+  document.getElementById('plan-code').value = p.plan_code + '_copy';
+  document.getElementById('plan-name').value = p.name + ' (Copy)';
+  toast.fire({ icon: 'info', title: 'Plan duplicated into the form — adjust the code/name and Save' });
+}
+
+async function togglePlanActive(id) {
+  const p = allPlans.find(x => x.id === id); if (!p) return;
+  const body = { ...p, is_active: !p.is_active, symbols: p.symbols.map(s => ({ symbol: s.symbol, lot_limit: s.lot_limit })) };
+  const r = await apiFetch(`/api/admin/billing/plans/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+  if (r?.ok) { toast.fire({ icon: 'success', title: p.is_active ? 'Plan disabled' : 'Plan enabled' }); loadPlans(); }
+}
+
+function validatePlanForm(isContactSales, price) {
+  clearInvalidAll(['plan-code', 'plan-name', 'plan-price']);
+  let valid = true;
+  const code = document.getElementById('plan-code').value.trim();
+  if (!code) { markInvalid('plan-code', 'Required'); valid = false; }
+  else if (!/^[a-z0-9][a-z0-9_-]{1,29}$/i.test(code)) { markInvalid('plan-code', 'Letters/digits/underscore/hyphen only'); valid = false; }
+  if (!document.getElementById('plan-name').value.trim()) { markInvalid('plan-name', 'Required'); valid = false; }
+  if (!isContactSales && !(price > 0)) { markInvalid('plan-price', 'Must be greater than 0 unless Contact-Sales'); valid = false; }
+  return valid;
+}
+
+async function savePlan(ev) {
+  ev.preventDefault();
+  const id = document.getElementById('plan-edit-id').value;
+  const isContactSales = document.getElementById('plan-contact-sales').checked;
+  const price = parseFloat(document.getElementById('plan-price').value) || 0;
+  if (!validatePlanForm(isContactSales, price)) return false;
+
+  const body = {
+    plan_code: document.getElementById('plan-code').value.trim(),
+    name: document.getElementById('plan-name').value.trim(),
+    description: document.getElementById('plan-desc').value.trim() || null,
+    monthly_price: price,
+    gst_percentage: parseFloat(document.getElementById('plan-gst').value) || 0,
+    duration_days: parseInt(document.getElementById('plan-duration').value, 10) || 30,
+    is_contact_sales: isContactSales,
+    is_active: document.getElementById('plan-active').checked,
+    symbols: planSymbolDraft,
+  };
+  const url = id ? `/api/admin/billing/plans/${id}` : '/api/admin/billing/plans';
+  await withButtonBusy('plan-save-btn', 'Saving…', async () => {
+    const r = await apiFetch(url, { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) });
+    const d = await r?.json().catch(() => null);
+    if (r?.ok) { toast.fire({ icon: 'success', title: 'Plan saved' }); resetPlanForm(); loadPlans(); }
+    else { toast.fire({ icon: 'error', title: formatApiError(d, 'Failed to save plan') }); }
+  });
+  return false;
+}
+
+async function deletePlan(id) {
+  const confirm = await Swal.fire({ title: 'Delete this plan?', icon: 'warning', showCancelButton: true,
+    confirmButtonText: 'Delete', confirmButtonColor: '#ef4444', background: '#111827', color: '#e2e8f0' });
+  if (!confirm.isConfirmed) return;
+  const r = await apiFetch(`/api/admin/billing/plans/${id}`, { method: 'DELETE' });
+  if (r?.ok) { toast.fire({ icon: 'success', title: 'Plan deleted' }); loadPlans(); }
+}
+
+// ── Custom Subscriptions ──────────────────────────────────────────
+async function loadCustomSubs() {
+  const r = await apiFetch('/api/admin/billing/custom-subscriptions');
+  if (!r || !r.ok) return;
+  allCustomSubs = await r.json();
+  document.querySelector('#customSubsTable tbody').innerHTML = allCustomSubs.map(c => `
+    <tr><td>${c.label}</td><td>#${c.user_id}</td><td>${fmtMoney(c.custom_price)}</td>
+      <td>${c.symbols.map(s => s.symbol + ':' + s.lot_limit).join(', ') || '-'}</td>
+      <td><button class="btn btn-sm btn-brand" onclick="activateCustomSub(${c.id})"><i class="fa-solid fa-play me-1"></i>Activate</button></td></tr>`
+  ).join('') || `<tr><td colspan="5" class="text-muted text-center py-3">No custom subscriptions</td></tr>`;
+}
+
+function validateCustomSubForm(userId) {
+  clearInvalidAll(['cust-user-id', 'cust-label']);
+  let valid = true;
+  if (!userId || userId <= 0) { markInvalid('cust-user-id', 'Valid user ID required'); valid = false; }
+  if (!document.getElementById('cust-label').value.trim()) { markInvalid('cust-label', 'Required'); valid = false; }
+  return valid;
+}
+
+async function addCustomSub(ev) {
+  ev.preventDefault();
+  const userId = parseInt(document.getElementById('cust-user-id').value, 10);
+  if (!validateCustomSubForm(userId)) return false;
+
+  const raw = document.getElementById('cust-symbols').value.trim();
+  const symbols = raw ? raw.split(',').map(pair => {
+    const [symbol, lot] = pair.split(':').map(x => x.trim());
+    return { symbol: symbol.toUpperCase(), lot_limit: parseInt(lot, 10) || 1 };
+  }) : [];
+  const body = {
+    user_id: userId,
+    label: document.getElementById('cust-label').value.trim(),
+    custom_price: parseFloat(document.getElementById('cust-price').value) || 0,
+    custom_gst_percentage: document.getElementById('cust-gst').value ? parseFloat(document.getElementById('cust-gst').value) : null,
+    duration_days: parseInt(document.getElementById('cust-duration').value, 10) || 365,
+    notes: document.getElementById('cust-notes').value.trim() || null,
+    symbols,
+  };
+  await withButtonBusy('cust-add-btn', '…', async () => {
+    const r = await apiFetch('/api/admin/billing/custom-subscriptions', { method: 'POST', body: JSON.stringify(body) });
+    const d = await r?.json().catch(() => null);
+    if (r?.ok) { toast.fire({ icon: 'success', title: 'Custom subscription created' }); loadCustomSubs(); ev.target.reset(); }
+    else toast.fire({ icon: 'error', title: formatApiError(d, 'Failed to create') });
+  });
+  return false;
+}
+
+async function activateCustomSub(id) {
+  const confirm = await Swal.fire({ title: 'Activate now for this user?', icon: 'question', showCancelButton: true,
+    confirmButtonColor: '#10b981', background: '#111827', color: '#e2e8f0' });
+  if (!confirm.isConfirmed) return;
+  const r = await apiFetch(`/api/admin/billing/custom-subscriptions/${id}/activate`, { method: 'POST' });
+  if (r?.ok) { toast.fire({ icon: 'success', title: 'Activated' }); loadSubscriptions(); }
+}
+
+// ── Payments ─────────────────────────────────────────────────────
+async function loadPayments() {
+  const r = await apiFetch('/api/admin/billing/payments');
+  if (!r || !r.ok) return;
+  allPayments = await r.json();
+  renderPaymentsTable();
+}
+
+function renderPaymentsTable() {
+  document.querySelector('#paymentsTable tbody').innerHTML = allPayments.map(p => `
+    <tr>
+      <td>#${p.user_id}</td><td>${p.razorpay_order_id}</td><td>${fmtMoney(p.total_amount)}</td>
+      <td><span class="status-pill ${p.status}">${p.status}</span></td><td>${fmtDate(p.created_at)}</td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-soft" onclick='viewPaymentDetails(${JSON.stringify(p).replace(/'/g, "&apos;")})'><i class="fa-solid fa-eye"></i></button>
+        </div>
+      </td>
+    </tr>`).join('');
+  if (dtPayments) dtPayments.destroy();
+  dtPayments = $('#paymentsTable').DataTable({
+    pageLength: 10, order: [[4, 'desc']],
+    dom: 'Bfrtip', buttons: ['csvHtml5', 'excelHtml5', 'print'],
+  });
+}
+
+function viewPaymentDetails(p) {
+  document.getElementById('paymentModalBody').innerHTML = `
+    <div class="mb-2"><b>User:</b> #${p.user_id}</div>
+    <div class="mb-2"><b>Order ID:</b> ${p.razorpay_order_id}</div>
+    <div class="mb-2"><b>Payment ID:</b> ${p.razorpay_payment_id || '-'}</div>
+    <div class="mb-2"><b>Base Amount:</b> ${fmtMoney(p.base_amount)}</div>
+    <div class="mb-2"><b>GST:</b> ${fmtMoney(p.gst_amount)}</div>
+    <div class="mb-2"><b>Total:</b> ${fmtMoney(p.total_amount)}</div>
+    <div class="mb-2"><b>Status:</b> <span class="status-pill ${p.status}">${p.status}</span></div>
+    <div class="mb-2"><b>Created:</b> ${(p.created_at || '').replace('T', ' ').slice(0, 19)}</div>
+    <div class="mb-2"><b>Paid At:</b> ${p.paid_at ? p.paid_at.replace('T', ' ').slice(0, 19) : '-'}</div>`;
+  new bootstrap.Modal(document.getElementById('paymentModal')).show();
+}
+
+// ── Invoices ─────────────────────────────────────────────────────
+async function loadInvoices() {
+  const r = await apiFetch('/api/admin/billing/invoices');
+  if (!r || !r.ok) return;
+  allInvoices = await r.json();
+  document.querySelector('#invoicesTable tbody').innerHTML = allInvoices.map(i => `
+    <tr><td>${i.invoice_number}</td><td>#${i.user_id}</td><td>${i.plan_name}</td><td>${fmtMoney(i.total_amount)}</td>
+      <td>${fmtDate(i.issued_at)}</td>
+      <td><button class="btn btn-sm btn-outline-soft" onclick="downloadInvoiceAdmin(${i.id})"><i class="fa-solid fa-download"></i></button></td></tr>`
+  ).join('');
+  if (dtInvoices) dtInvoices.destroy();
+  dtInvoices = $('#invoicesTable').DataTable({ pageLength: 10, order: [[4, 'desc']] });
+  renderRevenueByPlan();
+}
+
+async function downloadInvoiceAdmin(id) {
+  const token = getToken();
+  const resp = await fetch(`/api/admin/billing/invoices/${id}/download`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!resp.ok) { toast.fire({ icon: 'error', title: 'Download failed' }); return; }
+  const blob = await resp.blob(); const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `invoice-${id}.pdf`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+// ── Revenue / Reports ─────────────────────────────────────────────
+async function renderRevenueByPlan() {
+  const r = await apiFetch('/api/admin/billing/revenue');
+  if (!r || !r.ok) return;
+  const d = await r.json();
+  const rows = d.by_plan.map(row => `<tr><td>${planNameById(row.plan_id)}</td><td>${row.count}</td><td>${fmtMoney(row.total)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="text-muted text-center py-3">No revenue yet</td></tr>';
+  document.getElementById('revenueByPlan').innerHTML = rows;
+
+  renderStatGrid('revenueStatGrid', [
+    { icon: 'fa-sack-dollar', color: '#10b981', label: 'All-Time Revenue', value: d.all_time.total, money: true },
+    { icon: 'fa-calendar-days', color: '#3b82f6', label: 'Last 30 Days', value: d.last_30_days.total, money: true },
+    { icon: 'fa-receipt', color: '#8b5cf6', label: 'Successful Payments (All-Time)', value: d.all_time.count },
+    { icon: 'fa-percent', color: '#f59e0b', label: 'Avg. Payment Value',
+      value: d.all_time.count ? d.all_time.total / d.all_time.count : 0, money: true },
+  ]);
+  renderMonthlyRevenueChart('chartRevenue2');
+  renderReportsView();
+}
+
+function renderReportsView() {
+  destroyChart('chartReportTrialPaid');
+  const trial = allSubscriptions.filter(s => s.status === 'trial').length;
+  const paid = allSubscriptions.filter(s => s.status === 'active').length;
+  const ctx = document.getElementById('chartReportTrialPaid');
+  if (ctx) {
+    chartInstances['chartReportTrialPaid'] = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: ['Trial', 'Paid'], datasets: [{ data: [trial, paid], backgroundColor: ['#3b82f6', '#10b981'] }] },
+      options: { plugins: { legend: { display: false } },
+        scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' }, beginAtZero: true } } },
+    });
+  }
+  document.getElementById('reportSummaryTable').innerHTML = `
+    <tr><td>Total Users</td><td>${allUsers.length}</td></tr>
+    <tr><td>Trial Users</td><td>${trial}</td></tr>
+    <tr><td>Active Subscribers</td><td>${paid}</td></tr>
+    <tr><td>Total Plans</td><td>${allPlans.length}</td></tr>
+    <tr><td>Total Payments</td><td>${allPayments.length}</td></tr>
+    <tr><td>Total Invoices</td><td>${allInvoices.length}</td></tr>`;
+}
+
+function exportReportCsv() {
+  const rows = [['Metric', 'Value'],
+    ['Total Users', allUsers.length],
+    ['Trial Users', allSubscriptions.filter(s => s.status === 'trial').length],
+    ['Active Subscribers', allSubscriptions.filter(s => s.status === 'active').length],
+    ['Total Payments', allPayments.length],
+    ['Total Invoices', allInvoices.length]];
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'billing-report.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+// ── Manual Payments ─────────────────────────────────────────────
+let allManualPayments = [];
+let dtManualPayments;
+
+async function loadManualPayments() {
+  const r = await apiFetch('/api/admin/manual-payments');
+  if (!r || !r.ok) { document.querySelector('#manualPaymentsTable tbody').innerHTML = '<tr><td colspan="9" class="text-muted text-center py-3">Failed to load</td></tr>'; return; }
+  allManualPayments = await r.json();
+  renderManualPaymentsTable();
+}
+
+function renderManualPaymentsTable() {
+  document.querySelector('#manualPaymentsTable tbody').innerHTML = allManualPayments.map(p => {
+    const statusClass = p.status === 'pending' ? 'trial' : p.status === 'approved' || p.status === 'success' ? 'active' : 'cancelled';
+    const screenshotHtml = p.screenshot_path
+      ? `<a href="#" onclick="event.preventDefault(); window.open('/static/uploads/${p.screenshot_path}', '_blank')" class="btn btn-sm btn-outline-soft"><i class="fa-solid fa-image"></i></a>`
+      : '-';
+    const actionsHtml = p.status === 'pending'
+      ? `<div class="btn-group btn-group-sm">
+          <button class="btn btn-sm btn-outline-soft" style="color:var(--green);border-color:var(--green)" onclick="approveManualPayment(${p.id})"><i class="fa-solid fa-check"></i> Approve</button>
+          <button class="btn btn-sm btn-outline-soft" style="color:var(--danger);border-color:var(--danger)" onclick="rejectManualPayment(${p.id})"><i class="fa-solid fa-xmark"></i> Reject</button>
+         </div>`
+      : `<span class="text-muted small">—</span>`;
+    const planName = p.plan_name || '-';
+    return `<tr>
+      <td><b>#${p.user_id}</b></td>
+      <td class="small">${p.email || '-'}</td>
+      <td>${planName}</td>
+      <td>${fmtMoney(p.total_amount)}</td>
+      <td style="font-size:11px;max-width:120px;word-break:break-all">${p.utr_number || '-'}</td>
+      <td>${screenshotHtml}</td>
+      <td class="small">${p.created_at ? p.created_at.slice(0, 16).replace('T', ' ') : '-'}</td>
+      <td><span class="status-pill ${statusClass}">${p.status}</span></td>
+      <td>${actionsHtml}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">No manual payments yet</td></tr>';
+
+  if (dtManualPayments) dtManualPayments.destroy();
+  dtManualPayments = $('#manualPaymentsTable').DataTable({ pageLength: 10, order: [[6, 'desc']] });
+}
+
+async function approveManualPayment(id) {
+  const { value: remarks } = await Swal.fire({
+    title: 'Approve Payment',
+    text: 'This will activate the user\'s subscription.',
+    input: 'textarea',
+    inputPlaceholder: 'Optional remarks...',
+    showCancelButton: true,
+    confirmButtonText: '✅ Approve & Activate',
+    confirmButtonColor: '#10b981',
+    background: '#111827', color: '#e2e8f0',
+  });
+  if (remarks === undefined) return;
+  const r = await apiFetch(`/api/admin/manual-payments/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ remarks: remarks || null }),
+  });
+  if (r?.ok) {
+    toast.fire({ icon: 'success', title: 'Payment approved — subscription activated' });
+    loadManualPayments();
+    loadSubscriptions();
+  } else {
+    const d = await r?.json().catch(() => null);
+    toast.fire({ icon: 'error', title: formatApiError(d, 'Approval failed') });
+  }
+}
+
+async function rejectManualPayment(id) {
+  const { value: remarks } = await Swal.fire({
+    title: 'Reject Payment',
+    input: 'textarea',
+    inputPlaceholder: 'Reason for rejection (optional)',
+    showCancelButton: true,
+    confirmButtonText: '❌ Reject',
+    confirmButtonColor: '#ef4444',
+    background: '#111827', color: '#e2e8f0',
+  });
+  if (remarks === undefined) return;
+  const r = await apiFetch(`/api/admin/manual-payments/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ remarks: remarks || null }),
+  });
+  if (r?.ok) {
+    toast.fire({ icon: 'success', title: 'Payment rejected' });
+    loadManualPayments();
+  } else {
+    const d = await r?.json().catch(() => null);
+    toast.fire({ icon: 'error', title: formatApiError(d, 'Rejection failed') });
+  }
+}
+
+// ── Payment Settings ─────────────────────────────────────────────
+async function loadPaymentSettings() {
+  const r = await apiFetch('/api/admin/payment-settings');
+  if (!r || !r.ok) return;
+  const s = await r.json();
+
+  // Set payment mode radio
+  if (s.payment_mode === 'MANUAL') {
+    document.getElementById('pm-manual').checked = true;
+  } else {
+    document.getElementById('pm-razorpay').checked = true;
+  }
+
+  // Set manual payment config fields
+  document.getElementById('set-manual-upi-id').value = s.manual_upi_id || '';
+  document.getElementById('set-manual-qr-path').value = s.manual_qr_code_path || '';
+  document.getElementById('set-manual-instructions').value = s.manual_instructions || '';
+
+  onPaymentModeChange();
+}
+
+function onPaymentModeChange() {
+  const isManual = document.getElementById('pm-manual').checked;
+  document.getElementById('manualPaymentConfig').style.display = isManual ? 'block' : 'none';
+}
+
+async function savePaymentSettings(ev) {
+  ev.preventDefault();
+  const isManual = document.getElementById('pm-manual').checked;
+
+  if (isManual) {
+    clearInvalid('set-manual-upi-id');
+    if (!document.getElementById('set-manual-upi-id').value.trim()) {
+      markInvalid('set-manual-upi-id', 'UPI ID is required when Manual Payment is enabled');
+      return false;
+    }
+  }
+
+  const body = {
+    payment_mode: isManual ? 'MANUAL' : 'RAZORPAY',
+    manual_upi_id: document.getElementById('set-manual-upi-id').value.trim() || '',
+    manual_qr_code_path: document.getElementById('set-manual-qr-path').value.trim() || '',
+    manual_instructions: document.getElementById('set-manual-instructions').value.trim() || '',
+  };
+
+  await withButtonBusy('payment-settings-save-btn', 'Saving…', async () => {
+    const r = await apiFetch('/api/admin/payment-settings', { method: 'PUT', body: JSON.stringify(body) });
+    const d = await r?.json().catch(() => null);
+    if (r?.ok) toast.fire({ icon: 'success', title: 'Payment settings saved' });
+    else toast.fire({ icon: 'error', title: formatApiError(d, 'Failed to save payment settings') });
+  });
+  return false;
+}
+
+// ── Settings ───────────────────────────────────────────────────────
+async function loadBillingSettings() {
+  const r = await apiFetch('/api/admin/billing/settings');
+  if (!r || !r.ok) return;
+  const s = await r.json();
+  document.getElementById('set-gst-enabled').checked = s.gst_enabled;
+  document.getElementById('set-upgrade-mode').value = s.upgrade_mode;
+  document.getElementById('set-invoice-prefix').value = s.invoice_prefix;
+}
+async function saveBillingSettings(ev) {
+  ev.preventDefault();
+  clearInvalid('set-invoice-prefix');
+  const prefix = document.getElementById('set-invoice-prefix').value.trim();
+  if (!prefix) { markInvalid('set-invoice-prefix', 'Required'); return false; }
+
+  const body = {
+    gst_enabled: document.getElementById('set-gst-enabled').checked,
+    upgrade_mode: document.getElementById('set-upgrade-mode').value,
+    invoice_prefix: prefix,
+  };
+  await withButtonBusy('settings-save-btn', 'Saving…', async () => {
+    const r = await apiFetch('/api/admin/billing/settings', { method: 'PUT', body: JSON.stringify(body) });
+    const d = await r?.json().catch(() => null);
+    if (r?.ok) toast.fire({ icon: 'success', title: 'Settings saved' });
+    else toast.fire({ icon: 'error', title: formatApiError(d, 'Failed to save settings') });
+  });
+  return false;
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  const savedTheme = localStorage.getItem('billing_admin_theme');
+  if (savedTheme) document.getElementById('saasShell').dataset.theme = savedTheme;
+  const ok = await checkAdminAccess();
+  if (!ok) return;
+  renderPlanSymbolDraft();
+  loadAll();
+});
+</script>
+{% endblock %}
