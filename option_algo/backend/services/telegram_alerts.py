@@ -236,6 +236,41 @@ def alert_risk_limit_hit(bot_token: str, chat_id: str,
     _send_message(bot_token, chat_id, text)
 
 
+def alert_pending_trade(bot_token: str, chat_id: str,
+                        trade_id: int, symbol: str, opt_type: str,
+                        entry_price: float, sl: float, quantity: int,
+                        strategy: str, confidence: Optional[float] = None,
+                        expires_at: Optional[str] = None,
+                        trading_symbol: Optional[str] = None):
+    """
+    Sent when a SEMI_AUTO trade signal is generated and requires
+    user approval. Includes trade details and instructions to
+    approve or reject via Telegram command.
+    """
+    sym_display = trading_symbol or symbol
+    text = (
+        f"⏳ <b>Pending Trade #{trade_id} — Action Required</b>\n\n"
+        f"<b>{sym_display}</b> ({opt_type})\n"
+        f"Entry:  ₹{entry_price}\n"
+        f"SL:     ₹{sl}\n"
+        f"Qty:    {quantity}\n"
+        f"Strategy: {strategy}\n"
+    )
+    if confidence is not None:
+        text += f"Confidence: {confidence:.0f}%\n"
+    if expires_at:
+        text += f"\n⏰ Expires: {expires_at}\n"
+    text += (
+        f"\n"
+        f"✅ To APPROVE:  /approve_{trade_id}\n"
+        f"❌ To REJECT:   /reject_{trade_id}\n"
+        f"\n"
+        f"<i>Or use the dashboard to review all pending trades.</i>\n"
+        f"Time: {_now()}"
+    )
+    _send_message(bot_token, chat_id, text)
+
+
 def test_telegram(bot_token: str, chat_id: str) -> bool:
     """Test if the bot token and chat ID are valid."""
     text = (

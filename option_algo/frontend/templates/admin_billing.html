@@ -115,6 +115,9 @@
 .status-pill.success{background:rgba(16,185,129,.15); color:#10b981}
 .status-pill.failed{background:rgba(239,68,68,.15); color:#ef4444}
 .status-pill.created{background:rgba(148,163,184,.15); color:#94a3b8}
+.status-pill.pending_verification{background:rgba(245,158,11,.15); color:#f59e0b}
+.status-pill.approved{background:rgba(16,185,129,.15); color:#10b981}
+.status-pill.rejected{background:rgba(239,68,68,.15); color:#ef4444}
 
 /* Pricing / plan cards */
 .plan-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px}
@@ -919,7 +922,7 @@ function renderUsersTable() {
       <td>${u.subscription_status ? `<span class="status-pill ${u.subscription_status}">${u.subscription_status}</span>` : '<span class="text-muted">none</span>'}</td>
       <td><button class="btn btn-sm btn-outline-soft" onclick="event.stopPropagation(); openUserDrawer(${u.id})"><i class="fa-solid fa-eye"></i></button></td>
     </tr>`).join('');
-  if (dtUsers) { dtUsers.destroy(); }
+  if ($.fn.dataTable.isDataTable('#usersTable')) { $('#usersTable').DataTable().destroy(); }
   dtUsers = $('#usersTable').DataTable({ pageLength: 10, lengthChange: false, searching: true, order: [] });
 }
 
@@ -1282,7 +1285,7 @@ function renderPaymentsTable() {
         </div>
       </td>
     </tr>`).join('');
-  if (dtPayments) dtPayments.destroy();
+  if ($.fn.dataTable.isDataTable('#paymentsTable')) { $('#paymentsTable').DataTable().destroy(); }
   dtPayments = $('#paymentsTable').DataTable({
     pageLength: 10, order: [[4, 'desc']],
     dom: 'Bfrtip', buttons: ['csvHtml5', 'excelHtml5', 'print'],
@@ -1313,7 +1316,7 @@ async function loadInvoices() {
       <td>${fmtDate(i.issued_at)}</td>
       <td><button class="btn btn-sm btn-outline-soft" onclick="downloadInvoiceAdmin(${i.id})"><i class="fa-solid fa-download"></i></button></td></tr>`
   ).join('');
-  if (dtInvoices) dtInvoices.destroy();
+  if ($.fn.dataTable.isDataTable('#invoicesTable')) { $('#invoicesTable').DataTable().destroy(); }
   dtInvoices = $('#invoicesTable').DataTable({ pageLength: 10, order: [[4, 'desc']] });
   renderRevenueByPlan();
 }
@@ -1396,11 +1399,11 @@ async function loadManualPayments() {
 
 function renderManualPaymentsTable() {
   document.querySelector('#manualPaymentsTable tbody').innerHTML = allManualPayments.map(p => {
-    const statusClass = p.status === 'pending' ? 'trial' : p.status === 'approved' || p.status === 'success' ? 'active' : 'cancelled';
+    const statusClass = p.status === 'pending_verification' ? 'pending_verification' : p.status === 'approved' || p.status === 'success' ? 'approved' : p.status === 'rejected' ? 'rejected' : p.status;
     const screenshotHtml = p.screenshot_path
-      ? `<a href="#" onclick="event.preventDefault(); window.open('/static/uploads/${p.screenshot_path}', '_blank')" class="btn btn-sm btn-outline-soft"><i class="fa-solid fa-image"></i></a>`
+      ? `<a href="#" onclick="event.preventDefault(); window.open('/${p.screenshot_path}', '_blank')" class="btn btn-sm btn-outline-soft"><i class="fa-solid fa-image"></i></a>`
       : '-';
-    const actionsHtml = p.status === 'pending'
+    const actionsHtml = p.status === 'pending_verification'
       ? `<div class="btn-group btn-group-sm">
           <button class="btn btn-sm btn-outline-soft" style="color:var(--green);border-color:var(--green)" onclick="approveManualPayment(${p.id})"><i class="fa-solid fa-check"></i> Approve</button>
           <button class="btn btn-sm btn-outline-soft" style="color:var(--danger);border-color:var(--danger)" onclick="rejectManualPayment(${p.id})"><i class="fa-solid fa-xmark"></i> Reject</button>
@@ -1420,7 +1423,7 @@ function renderManualPaymentsTable() {
     </tr>`;
   }).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">No manual payments yet</td></tr>';
 
-  if (dtManualPayments) dtManualPayments.destroy();
+  if ($.fn.dataTable.isDataTable('#manualPaymentsTable')) { $('#manualPaymentsTable').DataTable().destroy(); }
   dtManualPayments = $('#manualPaymentsTable').DataTable({ pageLength: 10, order: [[6, 'desc']] });
 }
 

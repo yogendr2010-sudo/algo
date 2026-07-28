@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 
 from backend.config import get_settings
-from backend.db.database import init_db
+from backend.db.database import init_db, close_db
 from backend.routers.auth import router as auth_router
 from backend.routers.all_routers import (
     router        as users_router,
@@ -47,8 +47,12 @@ async def lifespan(app: FastAPI):
 
     yield
     # ── Shutdown ─────────────────────────────────────────────────
-    # Nothing to do here — bot threads are owned and gracefully
-    # stopped by worker.py on its own SIGTERM handler.
+    # Gracefully close the async DB engine pool to prevent Windows
+    # ProactorEventLoop "NoneType has no attribute 'send'" errors
+    # when asyncpg connections outlive the event loop.
+    await close_db()
+    # Bot threads are owned and gracefully stopped by worker.py on
+    # its own SIGTERM handler.
 
 
 def _validate_production_config():
@@ -103,6 +107,7 @@ app.add_middleware(
 
 # Static files and templates
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 templates = Jinja2Templates(directory="frontend/templates")
 
 # API routers

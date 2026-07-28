@@ -36,8 +36,7 @@
     <div class="stat-pill"><span class="pill-label">Mode</span><b id="d-mode">—</b></div>
     <div class="stat-pill"><span class="pill-label">Strategy</span><b id="d-strategy">—</b></div>
     <div class="stat-pill"><span class="pill-label">Qty</span><b id="d-qty">—</b></div>
-    <div class="stat-pill" id="extra-syms-pill" style="display:none"><span class="pill-label">Also</span><b
-        id="d-extra">—</b></div>
+    <div id="extra-symbol-pills" style="display:contents"></div>
   </div><!-- end top-stats -->
 
   <!-- Subscription Status (standalone section — shown only when ≤7 days remain) -->
@@ -59,14 +58,46 @@
     </div>
   </div>
 
-<!-- Pending Trades Queue (Semi Auto mode — standalone section) -->
-  <div class="card" id="pending-trades-card" style="display:none">
-    <div class="card-head">
-      <span class="card-title">⏳ Pending Trades</span>
-      <span class="muted" style="font-size:11px" id="pending-count">0 waiting</span>
-    </div>
-    <div id="pending-trades-body">
-      <div class="muted center py16">No pending trades</div>
+<!-- Pending Trade Approval Modal (Semi Auto mode — appears on new trade signal) -->
+  <div class="modal-overlay" id="pending-trade-modal" style="display:none">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-title">⏳ New Trade Signal</span>
+        <span class="modal-countdown" id="modal-countdown">25s</span>
+      </div>
+      <div class="modal-body">
+        <div class="modal-rows">
+          <div class="modal-row">
+            <span class="modal-label">Symbol</span>
+            <span class="modal-val" id="modal-symbol">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">Option</span>
+            <span class="modal-val" id="modal-option">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">Strategy</span>
+            <span class="modal-val" id="modal-strategy">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">Entry Price</span>
+            <span class="modal-val green" id="modal-entry">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">Stop Loss</span>
+            <span class="modal-val red" id="modal-sl">—</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">Quantity</span>
+            <span class="modal-val" id="modal-qty">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-approve" id="modal-btn-approve" onclick="modalApprove()">✅ Approve &amp; Execute</button>
+        <button class="modal-btn modal-btn-reject" onclick="modalReject()">❌ Reject</button>
+      </div>
+      <div id="modal-msg" class="msg" style="margin-top:8px;text-align:center"></div>
     </div>
   </div>
 
@@ -1051,6 +1082,135 @@
                                               text-align: center
                                             }
 
+                                            /* ── Pending Trade Modal ── */
+                                            .modal-overlay {
+                                              position: fixed;
+                                              inset: 0;
+                                              background: rgba(0,0,0,.65);
+                                              z-index: 10000;
+                                              display: flex;
+                                              align-items: center;
+                                              justify-content: center;
+                                              padding: 16px;
+                                              backdrop-filter: blur(4px);
+                                              animation: modalFadeIn .2s ease;
+                                            }
+
+                                            @keyframes modalFadeIn {
+                                              from { opacity: 0; }
+                                              to { opacity: 1; }
+                                            }
+
+                                            .modal-card {
+                                              background: var(--card);
+                                              border: 1px solid var(--border);
+                                              border-radius: 14px;
+                                              max-width: 400px;
+                                              width: 100%;
+                                              box-shadow: 0 20px 60px rgba(0,0,0,.5);
+                                              animation: modalSlideIn .25s ease;
+                                              overflow: hidden;
+                                            }
+
+                                            @keyframes modalSlideIn {
+                                              from { transform: translateY(30px); opacity: 0; }
+                                              to { transform: translateY(0); opacity: 1; }
+                                            }
+
+                                            .modal-header {
+                                              display: flex;
+                                              justify-content: space-between;
+                                              align-items: center;
+                                              padding: 16px 20px 12px;
+                                              border-bottom: 1px solid var(--border);
+                                            }
+
+                                            .modal-title {
+                                              font-size: 15px;
+                                              font-weight: 700;
+                                              color: var(--text);
+                                            }
+
+                                            .modal-countdown {
+                                              font-size: 13px;
+                                              font-weight: 700;
+                                              color: #f59e0b;
+                                              background: rgba(245,158,11,.12);
+                                              padding: 4px 10px;
+                                              border-radius: 6px;
+                                              font-family: monospace;
+                                            }
+
+                                            .modal-body {
+                                              padding: 12px 20px;
+                                            }
+
+                                            .modal-rows {
+                                              display: flex;
+                                              flex-direction: column;
+                                              gap: 8px;
+                                            }
+
+                                            .modal-row {
+                                              display: flex;
+                                              justify-content: space-between;
+                                              align-items: center;
+                                              padding: 6px 0;
+                                              border-bottom: 1px solid rgba(51,65,85,.3);
+                                            }
+
+                                            .modal-row:last-child {
+                                              border-bottom: none;
+                                            }
+
+                                            .modal-label {
+                                              font-size: 12px;
+                                              color: var(--muted);
+                                              font-weight: 600;
+                                            }
+
+                                            .modal-val {
+                                              font-size: 13px;
+                                              font-weight: 700;
+                                              color: var(--text);
+                                              font-family: monospace;
+                                            }
+
+                                            .modal-val.green { color: var(--green); }
+                                            .modal-val.red { color: var(--red); }
+
+                                            .modal-actions {
+                                              display: flex;
+                                              gap: 10px;
+                                              padding: 12px 20px 18px;
+                                            }
+
+                                            .modal-btn {
+                                              flex: 1;
+                                              padding: 12px;
+                                              border: none;
+                                              border-radius: 8px;
+                                              font-size: 13px;
+                                              font-weight: 700;
+                                              cursor: pointer;
+                                              transition: opacity .2s, transform .1s;
+                                              min-height: 44px;
+                                            }
+
+                                            .modal-btn:active { transform: scale(.97); }
+                                            .modal-btn:hover { opacity: .88; }
+
+                                            .modal-btn-approve {
+                                              background: var(--green);
+                                              color: #000;
+                                            }
+
+                                            .modal-btn-reject {
+                                              background: rgba(239,68,68,.15);
+                                              color: var(--red);
+                                              border: 1px solid var(--red);
+                                            }
+
                                             /* ── Mobile-specific overrides (≤480px) ── */
                                             @media(max-width:480px) {
                                               .stat-pill {
@@ -1136,9 +1296,39 @@
                                               modeEl.textContent = isPaper ? '📄 Paper' : '💰 Live';
                                               modeEl.style.color = isPaper ? '#f59e0b' : '#22c55e';
 
-                                              if (c.extra_symbols) {
-                                                document.getElementById('extra-syms-pill').style.display = '';
-                                                document.getElementById('d-extra').textContent = c.extra_symbols;
+                                              // Render per-symbol pills with lot counts from extra_symbol_config
+                                              const pillsContainer = document.getElementById('extra-symbol-pills');
+                                              pillsContainer.innerHTML = '';
+                                              try {
+                                                const extraConfigs = JSON.parse(c.extra_symbol_config || '[]');
+                                                extraConfigs.forEach(cfg => {
+                                                  if (cfg.symbol && cfg.enabled !== false) {
+                                                    const pill = document.createElement('div');
+                                                    pill.className = 'stat-pill';
+                                                    const lotLabel = document.createElement('span');
+                                                    lotLabel.className = 'pill-label';
+                                                    lotLabel.textContent = cfg.symbol;
+                                                    const lotVal = document.createElement('b');
+                                                    lotVal.textContent = (cfg.lots || 1) + ' lot';
+                                                    pill.appendChild(lotLabel);
+                                                    pill.appendChild(lotVal);
+                                                    pillsContainer.appendChild(pill);
+                                                  }
+                                                });
+                                              } catch (e) {
+                                                // Fallback: show comma-separated symbols from extra_symbols if JSON parse fails
+                                                if (c.extra_symbols) {
+                                                  const fallbackPill = document.createElement('div');
+                                                  fallbackPill.className = 'stat-pill';
+                                                  const lbl = document.createElement('span');
+                                                  lbl.className = 'pill-label';
+                                                  lbl.textContent = 'Also';
+                                                  const val = document.createElement('b');
+                                                  val.textContent = c.extra_symbols;
+                                                  fallbackPill.appendChild(lbl);
+                                                  fallbackPill.appendChild(val);
+                                                  pillsContainer.appendChild(fallbackPill);
+                                                }
                                               }
 
                                               // Show Telegram setup card if not configured
@@ -1210,99 +1400,98 @@
                                               }
                                             }
 
-                                            // ── Pending Trades (Semi Auto mode) ──────────────────────────────
-                                            async function loadPendingTrades() {
-                                              try {
-                                                const r = await apiFetch('/api/users/pending-trades');
-                                                if (!r || !r.ok) return;
-                                                const trades = await r.json();
-                                                const card = document.getElementById('pending-trades-card');
-                                                const body = document.getElementById('pending-trades-body');
-                                                const countEl = document.getElementById('pending-count');
-                                                if (!body) return;
+                                            // ── Pending Trade Modal (Semi Auto mode) ─────────────────────────
+                                            let _modalTradeId = null;
+                                            let _modalTimer = null;
+                                            let _modalCountdown = 0;
+                                            const MODAL_TIMEOUT_SEC = 25;
 
-                                                // Show card only if there are pending trades or mode is SEMI_AUTO
-                                                const waiting = trades.filter(t => t.status === 'WAITING');
-                                                if (card) {
-                                                  card.style.display = (trades.length > 0) ? '' : 'none';
+                                            function showPendingModal(d) {
+                                              // Populate modal fields
+                                              document.getElementById('modal-symbol').textContent = d.trading_symbol || d.symbol || '—';
+                                              document.getElementById('modal-option').textContent = (d.opt_type || '') + ' ' + (d.strike || '');
+                                              document.getElementById('modal-strategy').textContent = d.strategy || d.strategy_name || '—';
+                                              document.getElementById('modal-entry').textContent = '₹' + (d.entry_price || 0);
+                                              document.getElementById('modal-sl').textContent = '₹' + (d.stop_loss || 0);
+                                              document.getElementById('modal-qty').textContent = d.quantity || '—';
+
+                                              // Store trade ID and reset message
+                                              _modalTradeId = d.pending_trade_id;
+                                              const msgEl = document.getElementById('modal-msg');
+                                              msgEl.textContent = '';
+                                              msgEl.className = 'msg';
+                                              document.getElementById('modal-btn-approve').disabled = false;
+
+                                              // Show modal
+                                              document.getElementById('pending-trade-modal').style.display = 'flex';
+
+                                              // Start countdown
+                                              _modalCountdown = MODAL_TIMEOUT_SEC;
+                                              updateCountdown();
+                                              clearInterval(_modalTimer);
+                                              _modalTimer = setInterval(updateCountdown, 1000);
+
+                                              // Auto-dismiss on timeout
+                                              setTimeout(() => {
+                                                if (_modalTradeId === d.pending_trade_id && document.getElementById('pending-trade-modal').style.display !== 'none') {
+                                                  modalClose('⏰ Trade signal expired — no action taken');
                                                 }
-                                                if (countEl) countEl.textContent = `${waiting.length} waiting`;
+                                              }, MODAL_TIMEOUT_SEC * 1000);
+                                            }
 
-                                                if (!trades.length) {
-                                                  body.innerHTML = '<div class="muted center py16">No pending trades</div>';
-                                                  return;
-                                                }
-
-                                                body.innerHTML = trades.map(t => {
-                                                  const isWaiting = t.status === 'WAITING';
-                                                  const expiresIn = t.expires_at ? timeUntilExpiry(t.expires_at) : '—';
-                                                  const statusBadge = {
-                                                    'WAITING': '<span class="badge-status waiting" style="color:#f59e0b">⏳ Pending</span>',
-                                                    'APPROVED': '<span class="badge-status approved" style="color:var(--green)">✅ Approved</span>',
-                                                    'REJECTED': '<span class="badge-status rejected" style="color:var(--red)">❌ Rejected</span>',
-                                                    'EXPIRED': '<span class="badge-status expired" style="color:var(--muted)">⏰ Expired</span>',
-                                                  }[t.status] || t.status;
-
-                                                  const actionsHtml = isWaiting ? `
-        <div class="pending-actions" style="display:flex;gap:6px;margin-top:8px">
-          <button class="mini-btn" style="color:var(--green);border-color:var(--green);font-weight:600"
-            onclick="approvePendingTrade(${t.id})">✅ Approve</button>
-          <button class="mini-btn" style="color:var(--red);border-color:var(--red)"
-            onclick="rejectPendingTrade(${t.id})">❌ Reject</button>
-        </div>
-        <div class="muted" style="font-size:11px;margin-top:4px">⏱ Expires in ${expiresIn}</div>
-      ` : '';
-
-                                                  return `<div class="pending-trade-item" style="padding:10px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;background:var(--card2,#1a2235)">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
-          <div>
-            <b>${t.symbol}</b> ${t.opt_type || ''} · ${t.strategy || '—'}
-            <div class="muted" style="font-size:11px">Entry ₹${t.entry_price} · SL ₹${t.stop_loss} · Qty ${t.quantity}</div>
-            ${t.confidence ? `<div class="muted" style="font-size:11px">Confidence: ${t.confidence}%</div>` : ''}
-          </div>
-          <div style="text-align:right">
-            ${statusBadge}
-          </div>
-        </div>
-        ${actionsHtml}
-      </div>`;
-                                                }).join('');
-                                              } catch (e) {
-                                                console.error('loadPendingTrades:', e);
+                                            function updateCountdown() {
+                                              const el = document.getElementById('modal-countdown');
+                                              if (_modalCountdown <= 0) {
+                                                el.textContent = '0s';
+                                                return;
                                               }
+                                              el.textContent = _modalCountdown + 's';
+                                              _modalCountdown--;
                                             }
 
-                                            function timeUntilExpiry(expiresAt) {
-                                              try {
-                                                const now = new Date();
-                                                const exp = new Date(expiresAt.endsWith('Z') ? expiresAt : expiresAt + 'Z');
-                                                const diff = exp - now;
-                                                if (diff <= 0) return 'expired';
-                                                const sec = Math.floor(diff / 1000);
-                                                if (sec < 60) return `${sec}s`;
-                                                return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-                                              } catch (e) { return '—'; }
-                                            }
-
-                                            async function approvePendingTrade(tradeId) {
-                                              const r = await apiFetch(`/api/users/pending-trades/${tradeId}/approve`, { method: 'POST' });
+                                            async function modalApprove() {
+                                              if (!_modalTradeId) return;
+                                              const btn = document.getElementById('modal-btn-approve');
+                                              btn.disabled = true;
+                                              btn.textContent = '⏳ Executing...';
+                                              const r = await apiFetch(`/api/users/pending-trades/${_modalTradeId}/approve`, { method: 'POST' });
                                               const d = await r?.json() || {};
                                               if (r?.ok) {
-                                                addFeed(`✅ Trade #${tradeId} approved — executing live order`, 'entry');
-                                                loadPendingTrades();
+                                                modalClose('✅ Trade approved & executed', 'success');
+                                                addFeed(`✅ Trade #${_modalTradeId} approved — executing live order`, 'entry');
                                               } else {
-                                                addFeed(`❌ Approval failed: ${d.detail || d.error || 'Unknown error'}`, 'error');
+                                                document.getElementById('modal-msg').textContent = '❌ ' + (d.detail || d.error || 'Failed');
+                                                document.getElementById('modal-msg').className = 'msg error';
+                                                btn.disabled = false;
+                                                btn.textContent = '✅ Approve & Execute';
                                               }
                                             }
 
-                                            async function rejectPendingTrade(tradeId) {
-                                              if (!confirm(`Reject trade #${tradeId}?`)) return;
-                                              const r = await apiFetch(`/api/users/pending-trades/${tradeId}/reject`, { method: 'POST' });
+                                            async function modalReject() {
+                                              if (!_modalTradeId) return;
+                                              const r = await apiFetch(`/api/users/pending-trades/${_modalTradeId}/reject`, { method: 'POST' });
                                               if (r?.ok) {
-                                                addFeed(`❌ Trade #${tradeId} rejected`, 'signal');
-                                                loadPendingTrades();
+                                                modalClose('❌ Trade rejected', '');
+                                                addFeed(`❌ Trade #${_modalTradeId} rejected`, 'signal');
                                               } else {
-                                                addFeed(`❌ Rejection failed`, 'error');
+                                                document.getElementById('modal-msg').textContent = '❌ Rejection failed';
+                                                document.getElementById('modal-msg').className = 'msg error';
+                                              }
+                                            }
+
+                                            function modalClose(msg, cls) {
+                                              clearInterval(_modalTimer);
+                                              _modalTimer = null;
+                                              _modalTradeId = null;
+                                              const modal = document.getElementById('pending-trade-modal');
+                                              if (msg) {
+                                                const msgEl = document.getElementById('modal-msg');
+                                                msgEl.textContent = msg;
+                                                msgEl.className = 'msg ' + (cls || '');
+                                                // Keep visible briefly so user sees the status
+                                                setTimeout(() => { modal.style.display = 'none'; }, 1200);
+                                              } else {
+                                                modal.style.display = 'none';
                                               }
                                             }
 
@@ -1536,8 +1725,6 @@
                                                     addFeed('⚠️ Bot error: ' + d.error, 'error');
                                                     document.getElementById('bot-badge').className = 'status-badge error';
                                                   }
-                                                  // Refresh pending trades on bot status change
-                                                  loadPendingTrades();
                                                   break;
                                                 case 'SL_CANCEL':
                                                   addFeed(`❎ [${sym}] SL Cancelled ₹${d.sl_trigger}${d.reason ? ' — ' + d.reason : ''}`, 'signal');
@@ -1552,12 +1739,11 @@
                                                   addFeed(`🚫 [${sym}] RISK LIMIT: ${d.reason} (value: ${d.value}) — no new entries today`, 'error');
                                                   break;
                                                 case 'PENDING_TRADE':
-                                                  addFeed(`⏳ [${sym}] PENDING TRADE: ${d.trading_symbol || sym} ${d.opt_type || ''} @ ₹${d.entry_price} | Approve on dashboard${d.expires_at ? ' · expires ' + timeUntilExpiry(d.expires_at) : ''}`, 'signal');
-                                                  loadPendingTrades();
+                                                  addFeed(`⏳ [${sym}] PENDING TRADE: ${d.trading_symbol || sym} ${d.opt_type || ''} @ ₹${d.entry_price} | Approve or reject in the popup`, 'signal');
+                                                  showPendingModal(d);
                                                   break;
                                                 case 'SIGNAL_APPROVED':
                                                   addFeed(`✅ [${sym}] Trade approved — executing live order`, 'entry');
-                                                  loadPendingTrades();
                                                   break;
                                                 case 'ORDER_UPDATE': {
                                                   const st = (d.status || '').toLowerCase();
@@ -1905,9 +2091,7 @@ loadConfig();
                                               initPush();
                                               checkEmailVerified();
   checkSubscriptionStatus();
-  loadPendingTrades();
   setInterval(loadPositions, 5000);
-  setInterval(loadPendingTrades, 10000);
   setInterval(loadSummary, 30000);
   setInterval(loadTodayTrades, 30000);
   setInterval(loadPaymentStatus, 30000);

@@ -564,7 +564,7 @@ function showManualPaymentModal(data) {
   const qrImg = document.getElementById('manualQrImg');
   if (data.qr_code_path) {
     qrContainer.style.display = 'block';
-    qrImg.src = data.qr_code_path.startsWith('http') ? data.qr_code_path : '/static/uploads/' + data.qr_code_path;
+    qrImg.src = data.qr_code_path.startsWith('http') ? data.qr_code_path : '/' + data.qr_code_path;
   } else {
     qrContainer.style.display = 'none';
   }

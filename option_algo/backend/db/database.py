@@ -48,6 +48,18 @@ async def init_db():
 
 
 # ================================================================
+# Engine lifecycle — call close_db() on graceful shutdown to
+# prevent Windows ProactorEventLoop crashes from lingering
+# asyncpg connection-pool cleanup.
+# ================================================================
+
+async def close_db():
+    """Gracefully close the async engine connection pool."""
+    if engine is not None:
+        await engine.dispose()
+
+
+# ================================================================
 # Sync engine — used ONLY by push_notifications.send_push_sync(),
 # called from worker.py's sync command-handling thread. A tiny
 # read/delete query doesn't justify routing through the async

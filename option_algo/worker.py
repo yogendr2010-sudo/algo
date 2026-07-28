@@ -25,13 +25,14 @@
 
 import asyncio
 import signal
+import sys
 import threading
 import traceback
 from datetime import datetime
 
 from sqlalchemy import select
 
-from backend.db.database import init_db, AsyncSessionLocal
+from backend.db.database import init_db, AsyncSessionLocal, close_db
 from backend.db.models import BotConfig, BotStatus, Trade, TradeStatus
 from backend.services.bot_manager import bot_manager, set_main_loop
 from backend.services.bot_config_builder import resolve_start_inputs
@@ -57,6 +58,74 @@ def _push(user_id: int, title: str, body: str, data: dict = None, tag: str = Non
         send_push_sync(user_id, title, body, data, tag)
     except Exception as e:
         print(f"{_now()} [push] error for user {user_id}: {e}")
+
+
+def _send_pending_trade_telegram_alert(user_id: int, trade_data: dict):
+    """
+    Send a Telegram notification for a PENDING_TRADE event.
+    Fetches the user's bot token and chat ID from BotConfig.
+    Runs synchronously — safe to call from any thread.
+    """
+    try:
+        import asyncio
+        from backend.db.database import AsyncSessionLocal
+        from backend.db.models import BotConfig
+        from sqlalchemy import select
+
+        # Fetch user's Telegram config
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        async def _fetch():
+            async with AsyncSessionLocal() as db:
+                res = await db.execute(
+                    select(BotConfig).where(BotConfig.user_id == user_id)
+                )
+                cfg = res.scalar_one_or_none()
+                if not cfg:
+                    return None
+                return {
+                    "bot_token": cfg.telegram_bot_token or "",
+                    "chat_id": cfg.telegram_chat_id or "",
+                }
+        result = loop.run_until_complete(_fetch())
+        loop.close()
+
+        if not result or not result["bot_token"] or not result["chat_id"]:
+            print(f"{_now()} [worker] No Telegram config for user {user_id} - cannot send pending trade alert")
+            return
+
+        bot_token = result["bot_token"]
+        chat_id = result["chat_id"]
+
+        from backend.services import telegram_alerts as tg
+        trade_id = trade_data.get("pending_trade_id")
+        symbol = trade_data.get("trading_symbol") or trade_data.get("symbol", "")
+        opt_type = trade_data.get("opt_type", "")
+        entry_price = trade_data.get("entry_price", 0)
+        stop_loss = trade_data.get("stop_loss", 0)
+        quantity = trade_data.get("quantity", 0)
+        strategy = trade_data.get("strategy", "")
+        confidence = trade_data.get("confidence")
+        expires_at = trade_data.get("expires_at")
+        trading_symbol = trade_data.get("trading_symbol")
+
+        if trade_id:
+            tg.alert_pending_trade(
+                bot_token, chat_id,
+                trade_id=trade_id,
+                symbol=symbol,
+                opt_type=opt_type,
+                entry_price=entry_price,
+                sl=stop_loss,
+                quantity=quantity,
+                strategy=strategy,
+                confidence=confidence,
+                expires_at=expires_at,
+                trading_symbol=trading_symbol or symbol,
+            )
+            print(f"{_now()} [worker] Telegram pending trade alert sent for trade #{trade_id}")
+    except Exception as e:
+        print(f"{_now()} [worker] Failed to send Telegram pending trade alert: {e}")
 
 
 async def _on_status_change(user_id: int, status: BotStatus, error_msg: str = None):
@@ -131,6 +200,15 @@ async def _on_trade(user_id: int, trade_data: dict):
         _push(user_id, f"🚫 Risk Limit Hit: {sym}",
               f"{trade_data.get('reason', '')} — no new entries today",
               data={"event": event}, tag="risk-limit")
+
+    elif event == "PENDING_TRADE":
+        # Send Telegram notification for semi-auto trade approval
+        _push(user_id, f"⏳ Pending Trade: {sym}",
+              f"{trade_data.get('opt_type','')} {trade_data.get('strike','')} "
+              f"@ ₹{trade_data.get('entry_price')} — Action required",
+              data={"event": event}, tag=f"pending-{trade_data.get('pending_trade_id')}")
+        # Send Telegram alert with approve/reject buttons
+        _send_pending_trade_telegram_alert(user_id, trade_data)
 
     elif event == "SL_TRAIL":
         _push(user_id, f"📍 SL Trailed: {sym}",
@@ -334,7 +412,7 @@ def _handle_squareoff(user_id: int, payload: dict) -> dict:
     return {"ok": True, "closed": closed, "errors": errors}
 
 
-def _handle_approve_pending_trade(user_id: int, payload: dict) -> dict:
+def _handle_approve_pending_trade(user_id: int, payload: dict, main_loop: asyncio.AbstractEventLoop = None) -> dict:
     """
     Approve a pending trade and execute it.
     Called from the dashboard or Telegram approve button.
@@ -436,47 +514,82 @@ def _handle_approve_pending_trade(user_id: int, payload: dict) -> dict:
         from backend.engine.engine_v6 import get_lot_size
         return get_lot_size(sym, custom_ls)
 
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(
-            ptm.approve(trade_id, user_id, _place_order_from_signal)
+    # Run async approve() on the main event loop via run_coroutine_threadsafe
+    # to avoid creating/destroying new event loops (which corrupts ProactorEventLoop on Windows).
+    if main_loop is not None:
+        fut = asyncio.run_coroutine_threadsafe(
+            ptm.approve(trade_id, user_id, _place_order_from_signal),
+            main_loop,
         )
-        loop.close()
-        if result.status.value in ("EXECUTED",):
-            return {
-                "ok": True,
-                "status": "approved",
-                "message": result.message,
-                "trade_id": result.trade_id,
-            }
-        elif result.status.value == "EXPIRED":
-            return {"ok": False, "error": result.message}
-        else:
-            return {"ok": False, "error": result.message}
-    except Exception as e:
-        return {"ok": False, "error": f"Approval failed: {e}"}
+        try:
+            result = fut.result(timeout=30)
+            if result.status.value in ("EXECUTED",):
+                return {
+                    "ok": True,
+                    "status": "approved",
+                    "message": result.message,
+                    "trade_id": result.trade_id,
+                }
+            elif result.status.value == "EXPIRED":
+                return {"ok": False, "error": result.message}
+            else:
+                return {"ok": False, "error": result.message}
+        except Exception as e:
+            return {"ok": False, "error": f"Approval failed: {e}"}
+    else:
+        # Fallback: run in a temporary loop (should not happen in normal operation)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(
+                ptm.approve(trade_id, user_id, _place_order_from_signal)
+            )
+            loop.close()
+            if result.status.value in ("EXECUTED",):
+                return {
+                    "ok": True,
+                    "status": "approved",
+                    "message": result.message,
+                    "trade_id": result.trade_id,
+                }
+            elif result.status.value == "EXPIRED":
+                return {"ok": False, "error": result.message}
+            else:
+                return {"ok": False, "error": result.message}
+        except Exception as e:
+            return {"ok": False, "error": f"Approval failed: {e}"}
 
 
-def _handle_reject_pending_trade(user_id: int, payload: dict) -> dict:
+def _handle_reject_pending_trade(user_id: int, payload: dict, main_loop: asyncio.AbstractEventLoop = None) -> dict:
     """Reject a pending trade."""
     trade_id = payload.get("trade_id")
     if not trade_id:
         return {"ok": False, "error": "trade_id required"}
 
     from backend.services.execution_layer import pending_trade_manager as ptm
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(ptm.reject(trade_id, user_id))
-        loop.close()
-        if result.status.value in ("REJECTED",):
-            return {"ok": True, "status": "rejected", "message": result.message}
-        return {"ok": False, "error": result.message}
-    except Exception as e:
-        return {"ok": False, "error": f"Rejection failed: {e}"}
+
+    if main_loop is not None:
+        fut = asyncio.run_coroutine_threadsafe(
+            ptm.reject(trade_id, user_id), main_loop
+        )
+        try:
+            result = fut.result(timeout=15)
+            if result.status.value in ("REJECTED",):
+                return {"ok": True, "status": "rejected", "message": result.message}
+            return {"ok": False, "error": result.message}
+        except Exception as e:
+            return {"ok": False, "error": f"Rejection failed: {e}"}
+    else:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(ptm.reject(trade_id, user_id))
+            loop.close()
+            if result.status.value in ("REJECTED",):
+                return {"ok": True, "status": "rejected", "message": result.message}
+            return {"ok": False, "error": result.message}
+        except Exception as e:
+            return {"ok": False, "error": f"Rejection failed: {e}"}
 
 
 def _handle_pause_resume(user_id: int, paused: bool) -> dict:
@@ -489,6 +602,9 @@ def _handle_pause_resume(user_id: int, paused: bool) -> dict:
     return {"ok": True, key: [e.symbol for e in engines]}
 
 
+_command_loop_main_loop = None  # set by main() to allow command handlers to dispatch async work
+
+
 def _expire_stale_pending_trades():
     """
     Background task runner: marks WAITING pending trades past their
@@ -496,11 +612,16 @@ def _expire_stale_pending_trades():
     """
     try:
         from backend.services.execution_layer import pending_trade_manager as ptm
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(ptm.expire_stale_trades())
-        loop.close()
+        if _command_loop_main_loop is not None:
+            fut = asyncio.run_coroutine_threadsafe(
+                ptm.expire_stale_trades(), _command_loop_main_loop
+            )
+            fut.result(timeout=15)
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(ptm.expire_stale_trades())
+            loop.close()
     except Exception as e:
         print(f"{_now()} [worker] expire_stale: {e}")
 
@@ -511,6 +632,8 @@ def _expire_stale_pending_trades():
 
 def _command_loop(main_loop: asyncio.AbstractEventLoop, stop_event: threading.Event):
     print(f"{_now()} [worker] Command consumer started")
+    global _command_loop_main_loop
+    _command_loop_main_loop = main_loop
     while not stop_event.is_set():
         try:
             cmd = pop_command_sync(timeout=5)
@@ -541,9 +664,9 @@ def _command_loop(main_loop: asyncio.AbstractEventLoop, stop_event: threading.Ev
             elif action == "resume":
                 result = _handle_pause_resume(user_id, False)
             elif action == "approve_pending_trade":
-                result = _handle_approve_pending_trade(user_id, payload)
+                result = _handle_approve_pending_trade(user_id, payload, main_loop)
             elif action == "reject_pending_trade":
-                result = _handle_reject_pending_trade(user_id, payload)
+                result = _handle_reject_pending_trade(user_id, payload, main_loop)
             else:
                 result = {"ok": False, "error": f"Unknown action: {action}"}
         except Exception:
@@ -677,10 +800,21 @@ async def main():
     for user_id in bot_manager.status_all().keys():
         clear_bot_status_sync(user_id)
 
+    # Gracefully close the async DB engine pool to prevent Windows
+    # ProactorEventLoop "NoneType has no attribute 'send'" errors.
+    await close_db()
+
     print(f"{_now()} [worker] Shutdown complete")
 
 
 if __name__ == "__main__":
+    # Windows uses ProactorEventLoop by default for subprocess support,
+    # but ProactorEventLoop has a known bug where _proactor becomes None
+    # during shutdown while asyncpg connections still try to use it,
+    # causing: AttributeError: 'NoneType' object has no attribute 'send'.
+    # SelectorEventLoop does not have this issue.
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

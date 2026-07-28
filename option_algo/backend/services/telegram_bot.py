@@ -254,6 +254,77 @@ def _handle_pnl(user_id: int, bot_token: str, chat_id: str):
     _tg_send(bot_token, chat_id, "\n".join(lines))
 
 
+def _handle_approve(user_id: int, bot_token: str, chat_id: str, args: list):
+    """
+    Approve a pending trade from Telegram.
+    Usage: /approve_<trade_id>  or  /approve <trade_id>
+    Uses the Redis command queue to send the approval to the worker.
+    """
+    trade_id = None
+    if args:
+        trade_id = args[0]
+    if not trade_id:
+        _tg_send(bot_token, chat_id, "❌ Usage: /approve_<trade_id>\nExample: /approve_42")
+        return
+
+    try:
+        trade_id = int(trade_id)
+    except ValueError:
+        _tg_send(bot_token, chat_id, "❌ Invalid trade ID. Example: /approve_42")
+        return
+
+    from backend.services.command_queue import send_command_sync
+
+    _tg_send(bot_token, chat_id, f"⏳ Approving trade #{trade_id}...")
+
+    try:
+        result = send_command_sync("approve_pending_trade", user_id,
+                                   {"trade_id": trade_id}, timeout=15.0)
+        if result.get("ok"):
+            msg = result.get("message", f"Trade #{trade_id} approved ✅")
+            _tg_send(bot_token, chat_id, f"✅ <b>Trade #{trade_id} Approved</b>\n{msg}")
+        else:
+            error = result.get("error", "Unknown error")
+            _tg_send(bot_token, chat_id, f"❌ Trade #{trade_id} approval failed:\n{error}")
+    except Exception as e:
+        _tg_send(bot_token, chat_id, f"❌ Error: {e}")
+
+
+def _handle_reject(user_id: int, bot_token: str, chat_id: str, args: list):
+    """
+    Reject a pending trade from Telegram.
+    Usage: /reject_<trade_id>  or  /reject <trade_id>
+    Uses the Redis command queue to send the rejection to the worker.
+    """
+    trade_id = None
+    if args:
+        trade_id = args[0]
+    if not trade_id:
+        _tg_send(bot_token, chat_id, "❌ Usage: /reject_<trade_id>\nExample: /reject_42")
+        return
+
+    try:
+        trade_id = int(trade_id)
+    except ValueError:
+        _tg_send(bot_token, chat_id, "❌ Invalid trade ID. Example: /reject_42")
+        return
+
+    from backend.services.command_queue import send_command_sync
+
+    _tg_send(bot_token, chat_id, f"⏳ Rejecting trade #{trade_id}...")
+
+    try:
+        result = send_command_sync("reject_pending_trade", user_id,
+                                   {"trade_id": trade_id}, timeout=15.0)
+        if result.get("ok"):
+            _tg_send(bot_token, chat_id, f"❌ <b>Trade #{trade_id} Rejected</b>")
+        else:
+            error = result.get("error", "Unknown error")
+            _tg_send(bot_token, chat_id, f"❌ Trade #{trade_id} rejection failed:\n{error}")
+    except Exception as e:
+        _tg_send(bot_token, chat_id, f"❌ Error: {e}")
+
+
 def _handle_help(bot_token: str, chat_id: str):
     text = (
         "📋 <b>Available Commands</b>\n\n"
@@ -280,6 +351,8 @@ COMMANDS = {
     "/pause":     lambda uid, tok, cid, args: _handle_pause(uid, tok, cid),
     "/resume":    lambda uid, tok, cid, args: _handle_resume(uid, tok, cid),
     "/pnl":       lambda uid, tok, cid, args: _handle_pnl(uid, tok, cid),
+    "/approve":   lambda uid, tok, cid, args: _handle_approve(uid, tok, cid, args),
+    "/reject":    lambda uid, tok, cid, args: _handle_reject(uid, tok, cid, args),
     "/help":      lambda uid, tok, cid, args: _handle_help(tok, cid),
     "/start":     lambda uid, tok, cid, args: _handle_help(tok, cid),
 }
@@ -290,6 +363,17 @@ def dispatch_command(user_id: int, bot_token: str,
     parts   = text.strip().split()
     cmd     = parts[0].lower().split("@")[0]  # strip @botname suffix
     args    = parts[1:]
+
+    # Parse /approve_42 or /reject_42 format (trade_id embedded in command)
+    if cmd.startswith("/approve_") and len(cmd) > 9:
+        trade_id_str = cmd[9:]  # extract "42" from "/approve_42"
+        cmd = "/approve"
+        args = [trade_id_str] + args
+    elif cmd.startswith("/reject_") and len(cmd) > 8:
+        trade_id_str = cmd[8:]  # extract "42" from "/reject_42"
+        cmd = "/reject"
+        args = [trade_id_str] + args
+
     handler = COMMANDS.get(cmd)
     if handler:
         try:

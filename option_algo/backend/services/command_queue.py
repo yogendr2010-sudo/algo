@@ -88,6 +88,38 @@ async def send_command(action: str, user_id: int, payload: Optional[dict] = None
 # WORKER SIDE (sync) — pop commands, post results
 # ================================================================
 
+def send_command_sync(action: str, user_id: int, payload: Optional[dict] = None,
+                       timeout: float = RESULT_WAIT_SEC) -> dict:
+    """
+    Synchronous version of send_command — pushes a command to the queue
+    and polls for the result. Used by background threads (Telegram bot
+    pollers) that cannot use asyncio.
+
+    Returns {"ok": True, "queued": True} if the worker doesn't respond
+    within `timeout` seconds.
+    """
+    import uuid as _uuid
+    cmd_id = _uuid.uuid4().hex
+    cmd = {
+        "id":      cmd_id,
+        "action":  action,
+        "user_id": user_id,
+        "payload": payload or {},
+    }
+    r = get_redis_sync()
+    r.lpush(QUEUE_KEY, json.dumps(cmd))
+
+    key      = f"bot:cmd_result:{cmd_id}"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        raw = r.get(key)
+        if raw:
+            r.delete(key)
+            return json.loads(raw)
+        time.sleep(0.15)
+    return {"ok": True, "queued": True}
+
+
 def pop_command_sync(timeout: int = 5) -> Optional[dict]:
     """
     Blocking pop with timeout (BRPOP). Returns None on timeout —
