@@ -17,6 +17,7 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     connect_args=_connect_args,
     pool_pre_ping=True,  # detect dropped Postgres connections
+    pool_recycle=300,    # recycle connections before server drops them
     pool_size=10,
     max_overflow=20,
 )
