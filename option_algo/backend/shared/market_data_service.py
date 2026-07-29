@@ -237,8 +237,11 @@ class SharedMarketDataService:
             r.hset(shared_tick_buffer(self.symbol), key=token, value=json.dumps(tick))
 
             # 2. Publish to Redis Stream (tick buffer for replay)
-            stream_key = shared_tick_stream(self.symbol)
-            r.xadd(stream_key, tick, maxlen=TICK_STREAM_MAXLEN)
+            try:
+                stream_key = shared_tick_stream(self.symbol)
+                r.xadd(stream_key, tick, maxlen=TICK_STREAM_MAXLEN)
+            except Exception:
+                pass  # Redis Streams not supported (Redis < 5.0)
 
             # 3. Publish to Redis Pub/Sub (real-time)
             r.publish(shared_tick_channel(self.symbol), json.dumps(tick))

@@ -291,7 +291,6 @@ class SharedStrategyEngine:
         for attempt in range(4):
             try:
                 r.publish(channel, data)
-                r.xadd(stream, {"signal": data}, maxlen=1000)
                 if signal_id:
                     self._last_published_id = signal_id
                 if attempt > 0:
@@ -309,6 +308,11 @@ class SharedStrategyEngine:
                           f"SIGNAL PUBLISH FAILED after 4 attempts: {e}")
                     set_bot_status_sync(0, "error",
                                         f"Signal publish failure for {self.symbol}")
+
+        try:
+            r.xadd(stream, {"signal": data}, maxlen=1000)
+        except Exception:
+            pass  # Redis Streams not supported (Redis < 5.0)
 
     # ================================================================
     # STRATEGY IMPLEMENTATIONS (identical logic to engine_v6)

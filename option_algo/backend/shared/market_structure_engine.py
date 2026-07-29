@@ -17,6 +17,12 @@ from datetime import datetime
 from typing import Optional
 
 from backend.shared.candle_builder import SharedCandleBuilder
+from backend.shared.redis_infra import (
+    shared_candle_close_channel,
+    shared_market_structure_1m,
+    shared_market_structure_5m,
+    shared_market_structure_state,
+)
 from backend.services.redis_client import get_redis_sync
 
 

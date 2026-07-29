@@ -620,14 +620,47 @@ def _expire_stale_pending_trades():
             fut = asyncio.run_coroutine_threadsafe(
                 ptm.expire_stale_trades(), _command_loop_main_loop
             )
-            fut.result(timeout=15)
+            try:
+                fut.result(timeout=15)
+            except RuntimeError as e:
+                if "different loop" in str(e):
+                    _expire_stale_sync()
+                    return
+                raise
         else:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(ptm.expire_stale_trades())
-            loop.close()
+            _expire_stale_sync()
     except Exception as e:
         _log(f"expire_stale: {e}")
+
+
+def _expire_stale_sync():
+    """Sync fallback for expiring stale pending trades."""
+    from datetime import datetime as _dt
+    from backend.db.database import get_sync_session
+    from backend.db.models import PendingTrade
+    from backend.services.execution_layer import PendingTradeStatus
+    from sqlalchemy import select as _select, update as _update
+
+    db = get_sync_session()
+    try:
+        now = _dt.utcnow()
+        expired = db.execute(
+            _select(PendingTrade).where(
+                PendingTrade.status == PendingTradeStatus.WAITING,
+                PendingTrade.expires_at <= now,
+            )
+        ).scalars().all()
+        for trade in expired:
+            trade.status = PendingTradeStatus.EXPIRED
+            db.add(trade)
+        if expired:
+            db.commit()
+            _log(f"Expired {len(expired)} stale pending trade(s) [sync]")
+    except Exception as e:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 # ================================================================
