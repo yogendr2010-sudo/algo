@@ -11,6 +11,19 @@
 # ================================================================
 
 import json
+import threading
+import time
+from datetime import datetime
+from typing import Optional
+
+from backend.shared.candle_builder import SharedCandleBuilder
+from backend.services.redis_client import get_redis_sync
+
+
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 class SharedMarketStructureEngine:
     """
     Maintains ONE MarketStructureEngine and ONE
