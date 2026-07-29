@@ -29,6 +29,8 @@ QUEUE_KEY        = "bot:commands"
 RESULT_TTL_SEC   = 30
 RESULT_WAIT_SEC  = 5.0     # how long the web process waits for an ack
 POLL_INTERVAL    = 0.15
+MAX_QUEUE_LENGTH = 1000    # reject new commands when queue exceeds this
+QUEUE_WARN_THRESHOLD = 500 # log warning when queue exceeds this
 
 
 # ================================================================
@@ -48,36 +50,24 @@ async def push_command(action: str, user_id: int, payload: Optional[dict] = None
         "user_id": user_id,
         "payload": payload or {},
     }
-    await get_redis().lpush(QUEUE_KEY, json.dumps(cmd))
+    r = get_redis()
+    queue_len = await r.llen(QUEUE_KEY)
+    if queue_len >= MAX_QUEUE_LENGTH:
+        return None  # caller should treat None as "rejected — queue full"
+    await r.lpush(QUEUE_KEY, json.dumps(cmd))
     return cmd_id
-
-
-async def wait_for_result(cmd_id: str, timeout: float = RESULT_WAIT_SEC) -> Optional[dict]:
-    """
-    Poll for the worker's result. Returns None if the worker hasn't
-    responded within `timeout` seconds (caller should treat this as
-    "queued — will be processed shortly").
-    """
-    r        = get_redis()
-    key      = f"bot:cmd_result:{cmd_id}"
-    deadline = asyncio.get_event_loop().time() + timeout
-    while asyncio.get_event_loop().time() < deadline:
-        raw = await r.get(key)
-        if raw:
-            await r.delete(key)
-            return json.loads(raw)
-        await asyncio.sleep(POLL_INTERVAL)
-    return None
 
 
 async def send_command(action: str, user_id: int, payload: Optional[dict] = None,
                         timeout: float = RESULT_WAIT_SEC) -> dict:
     """
     Convenience: push + wait. If the worker doesn't respond in time,
-    returns {"ok": True, "queued": True} — the command is still in the
-    queue / being processed, just async from the caller's perspective.
+    returns {"ok": True, "queued": True}.
+    Returns {"ok": False, "error": "Command queue is full"} if rejected.
     """
     cmd_id = await push_command(action, user_id, payload)
+    if cmd_id is None:
+        return {"ok": False, "error": "Command queue is full — please retry shortly"}
     result = await wait_for_result(cmd_id, timeout)
     if result is None:
         return {"ok": True, "queued": True}
@@ -107,6 +97,9 @@ def send_command_sync(action: str, user_id: int, payload: Optional[dict] = None,
         "payload": payload or {},
     }
     r = get_redis_sync()
+    queue_len = r.llen(QUEUE_KEY)
+    if queue_len >= MAX_QUEUE_LENGTH:
+        return {"ok": False, "error": "Command queue is full — please retry shortly"}
     r.lpush(QUEUE_KEY, json.dumps(cmd))
 
     key      = f"bot:cmd_result:{cmd_id}"
@@ -139,3 +132,32 @@ def pop_command_sync(timeout: int = 5) -> Optional[dict]:
 def post_result_sync(cmd_id: str, result: dict):
     r = get_redis_sync()
     r.set(f"bot:cmd_result:{cmd_id}", json.dumps(result, default=str), ex=RESULT_TTL_SEC)
+
+
+def get_queue_depth() -> int:
+    """Return current command queue depth."""
+    try:
+        return get_redis_sync().llen(QUEUE_KEY)
+    except Exception:
+        return -1
+
+
+def check_and_warn_queue():
+    """Check queue depth and log warning if above threshold."""
+    try:
+        depth = get_queue_depth()
+        if depth >= MAX_QUEUE_LENGTH:
+            print(f"[cmd-queue] CRITICAL: Queue depth {depth} >= {MAX_QUEUE_LENGTH} — commands being rejected")
+        elif depth >= QUEUE_WARN_THRESHOLD:
+            print(f"[cmd-queue] WARNING: Queue depth {depth} >= {QUEUE_WARN_THRESHOLD}")
+        return depth
+    except Exception:
+        return -1
+
+
+def trim_queue():
+    """Trim queue to MAX_QUEUE_LENGTH (called periodically by worker)."""
+    try:
+        get_redis_sync().ltrim(QUEUE_KEY, -MAX_QUEUE_LENGTH, -1)
+    except Exception:
+        pass

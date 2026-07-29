@@ -1,0 +1,399 @@
+# backend/shared/candle_builder.py
+# ================================================================
+# Shared Candle Builder — ONE per symbol.
+#
+# Replaces the per-user _candle_loop and per-user candle DataFrames.
+#
+# Pipeline:
+#   Live Tick (from shared Market Data Service)
+#       ↓
+#   1-Minute Candle (accumulated in Redis Hash, closed bar appended)
+#       ↓
+#   5-Minute Candle (aggregated from 1m bars)
+#
+# Stores:
+#   - 1m candles in Redis (JSON-serialized list of OHLCV dicts)
+#   - 5m candles in Redis (aggregated)
+#   - Current developing candle state in Redis Hash
+#   - Historical previous-day data in Redis
+#
+# Publishers:
+#   - candle_close channel on every new closed bar
+# ================================================================
+
+import json
+import threading
+from datetime import datetime, date, timedelta
+from typing import Optional
+
+import pandas as pd
+
+from backend.shared.redis_infra import (
+    shared_candles_1m,
+    shared_candles_5m,
+    shared_candle_current_1m,
+    shared_candle_current_5m,
+    shared_candle_close_channel,
+    shared_historical_1m,
+    shared_historical_5m,
+    shared_tick_channel,
+    CANDLE_TTL_SEC,
+    HISTORICAL_TTL_SEC,
+)
+from backend.shared.shared_cache import is_market_open, last_trading_day
+from backend.shared.dist_locks import acquire_lock_wait, release_lock
+from backend.services.redis_client import get_redis_sync
+
+MAX_1M_BARS = 750  # ~12.5 hours at 1-min
+MAX_5M_BARS = 150  # ~12.5 hours at 5-min
+
+
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+class SharedCandleBuilder:
+    """
+    Builds and maintains candles for ONE symbol.
+    Only ONE instance exists per active symbol.
+
+    Listens to tick_channel from SharedMarketDataService.
+    """
+
+    def __init__(self, symbol: str, access_token: str):
+        self.symbol = symbol.upper()
+        self.access_token = access_token
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._r = get_redis_sync()
+
+        self._cur_1m_min: Optional[str] = None
+        self._cur_1m: dict = {}
+
+        self._cur_5m_min: Optional[str] = None
+        self._cur_5m: dict = {}
+
+        self._1m_bars: list[dict] = []
+        self._5m_bars: list[dict] = []
+        self._lock = threading.Lock()
+        self._tick_counter = 0
+
+    def start(self):
+        """Start the candle builder in a background thread."""
+        if self._thread and self._thread.is_alive():
+            return
+
+        # Load existing data from Redis (recovery)
+        self._load_from_redis()
+
+        self._thread = threading.Thread(
+            target=self._loop, daemon=True,
+            name=f"candle-{self.symbol}",
+        )
+        self._thread.start()
+        print(f"{_now()} [candle:{self.symbol}] Started (1m={len(self._1m_bars)}, 5m={len(self._5m_bars)})")
+
+    def stop(self):
+        """Stop the candle builder."""
+        self._stop_event.set()
+        # Persist final state to Redis
+        self._save_to_redis()
+        print(f"{_now()} [candle:{self.symbol}] Stopped")
+
+    def _load_from_redis(self):
+        """Recover candle state from Redis after restart."""
+        r = self._r
+        raw_1m = r.get(shared_candles_1m(self.symbol))
+        if raw_1m:
+            self._1m_bars = json.loads(raw_1m)
+
+        raw_5m = r.get(shared_candles_5m(self.symbol))
+        if raw_5m:
+            self._5m_bars = json.loads(raw_5m)
+
+        # Recover current developing candles
+        cur_1m = r.hgetall(shared_candle_current_1m(self.symbol))
+        if cur_1m:
+            self._cur_1m = {
+                k: float(v) if k in ("open", "high", "low", "close", "volume") else v
+                for k, v in cur_1m.items()
+            }
+            self._cur_1m_min = cur_1m.get("minute")
+
+        cur_5m = r.hgetall(shared_candle_current_5m(self.symbol))
+        if cur_5m:
+            self._cur_5m = {
+                k: float(v) if k in ("open", "high", "low", "close", "volume") else v
+                for k, v in cur_5m.items()
+            }
+            self._cur_5m_min = cur_5m.get("minute")
+
+    def _save_to_redis(self):
+        """Persist candle state to Redis."""
+        r = self._r
+        with self._lock:
+            r.set(shared_candles_1m(self.symbol),
+                  json.dumps(self._1m_bars[-MAX_1M_BARS:], default=str),
+                  ex=CANDLE_TTL_SEC)
+            r.set(shared_candles_5m(self.symbol),
+                  json.dumps(self._5m_bars[-MAX_5M_BARS:], default=str),
+                  ex=CANDLE_TTL_SEC)
+
+            if self._cur_1m:
+                r.hset(shared_candle_current_1m(self.symbol), mapping={
+                    "open": str(self._cur_1m.get("open", 0)),
+                    "high": str(self._cur_1m.get("high", 0)),
+                    "low": str(self._cur_1m.get("low", 0)),
+                    "close": str(self._cur_1m.get("close", 0)),
+                    "volume": str(self._cur_1m.get("volume", 0)),
+                    "minute": self._cur_1m_min or "",
+                })
+
+            if self._cur_5m:
+                r.hset(shared_candle_current_5m(self.symbol), mapping={
+                    "open": str(self._cur_5m.get("open", 0)),
+                    "high": str(self._cur_5m.get("high", 0)),
+                    "low": str(self._cur_5m.get("low", 0)),
+                    "close": str(self._cur_5m.get("close", 0)),
+                    "volume": str(self._cur_5m.get("volume", 0)),
+                    "minute": self._cur_5m_min or "",
+                })
+
+    def _loop(self):
+        """Main candle building loop — subscribes to tick channel."""
+        from backend.shared.pubsub_utils import resilient_pubsub_consumer
+        channel = shared_tick_channel(self.symbol)
+
+        def _on_tick(data: dict):
+            self._process_tick(data)
+            self._tick_counter += 1
+            if self._tick_counter >= 60:
+                try:
+                    self._save_to_redis()
+                except Exception as e:
+                    print(f"{_now()} [candle:{self.symbol}] save err: {e}")
+                self._tick_counter = 0
+
+        resilient_pubsub_consumer(
+            tag=f"candle:{self.symbol}",
+            channels=[channel],
+            handler=_on_tick,
+            stop_event=self._stop_event,
+        )
+
+    def _process_tick(self, tick: dict):
+        """Process a single tick and update candles."""
+        ltp = tick.get("ltp", 0)
+        ltq = tick.get("ltq", 0)
+        token = tick.get("token", "")
+        ts = tick.get("ts", "")
+
+        if ltp <= 0:
+            return
+
+        now = datetime.now()
+        now_1m = now.strftime("%Y-%m-%d %H:%M")
+
+        # ── 1-Minute Candle ──────────────────────────────────────
+        with self._lock:
+            if self._cur_1m_min != now_1m:
+                # Close previous 1m bar
+                if self._cur_1m.get("open") is not None:
+                    closed = self._close_1m_bar()
+                    if closed:
+                        # Publish candle close event
+                        r = self._r
+                        r.publish(shared_candle_close_channel(self.symbol),
+                                  json.dumps({"symbol": self.symbol, "interval": "1m",
+                                              "candle": closed, "ts": now_1m}))
+
+                        # Check if 5m boundary
+                        minute_part = int(now_1m.split(":")[1])
+                        if minute_part % 5 == 0:
+                            self._close_5m_bar(now_1m)
+
+                # Start new 1m candle
+                self._cur_1m_min = now_1m
+                self._cur_1m = {
+                    "open": ltp, "high": ltp, "low": ltp,
+                    "close": ltp, "volume": ltq, "time": ts,
+                }
+            else:
+                # Update developing candle
+                self._cur_1m["close"] = ltp
+                self._cur_1m["high"] = max(self._cur_1m["high"], ltp)
+                self._cur_1m["low"] = min(self._cur_1m["low"], ltp)
+                self._cur_1m["volume"] = self._cur_1m.get("volume", 0) + ltq
+
+            # Update current 1m in Redis
+            self._r.hset(shared_candle_current_1m(self.symbol), mapping={
+                "open": str(self._cur_1m["open"]),
+                "high": str(self._cur_1m["high"]),
+                "low": str(self._cur_1m["low"]),
+                "close": str(self._cur_1m["close"]),
+                "volume": str(self._cur_1m["volume"]),
+                "minute": self._cur_1m_min,
+            })
+
+    def _close_1m_bar(self) -> Optional[dict]:
+        """Close the current 1-minute bar and append to the list."""
+        candle = dict(self._cur_1m)
+        candle["time"] = pd.Timestamp(self._cur_1m_min)
+        self._1m_bars.append(candle)
+
+        # Limit size
+        if len(self._1m_bars) > MAX_1M_BARS:
+            self._1m_bars = self._1m_bars[-MAX_1M_BARS:]
+
+        return candle
+
+    def _close_5m_bar(self, minute_str: str):
+        """Aggregate and close a 5-minute bar from 1m bars."""
+        now = pd.Timestamp(minute_str)
+        start = now - pd.Timedelta(minutes=5)
+
+        # Find 1m bars in the last 5 minutes
+        bars = [
+            b for b in self._1m_bars[-6:]
+            if isinstance(b.get("time"), pd.Timestamp)
+            and b["time"] > start
+            and b["time"] <= now
+        ]
+
+        if not bars:
+            return
+
+        candle_5m = {
+            "time": now,
+            "open": bars[0]["open"],
+            "high": max(b["high"] for b in bars),
+            "low": min(b["low"] for b in bars),
+            "close": bars[-1]["close"],
+            "volume": sum(b.get("volume", 0) for b in bars),
+        }
+
+        self._5m_bars.append(candle_5m)
+        if len(self._5m_bars) > MAX_5M_BARS:
+            self._5m_bars = self._5m_bars[-MAX_5M_BARS:]
+
+        # Save 5m to Redis immediately
+        self._r.set(shared_candles_5m(self.symbol),
+                    json.dumps(self._5m_bars, default=str),
+                    ex=CANDLE_TTL_SEC)
+
+        # Publish 5m close event
+        self._r.publish(shared_candle_close_channel(self.symbol),
+                        json.dumps({"symbol": self.symbol, "interval": "5m",
+                                    "candle": candle_5m, "ts": minute_str}))
+
+    # ================================================================
+    # DATA READERS — for downstream consumers
+    # ================================================================
+
+    def get_1m_df(self) -> pd.DataFrame:
+        """Get 1-minute candles as DataFrame (from in-memory list)."""
+        with self._lock:
+            bars = list(self._1m_bars)
+        if not bars:
+            return pd.DataFrame()
+        df = pd.DataFrame(bars)
+        if "time" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["time"]):
+            df["time"] = pd.to_datetime(df["time"])
+        for col in ["open", "high", "low", "close", "volume"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.sort_values("time").reset_index(drop=True)
+
+    def get_5m_df(self) -> pd.DataFrame:
+        """Get 5-minute candles as DataFrame."""
+        with self._lock:
+            bars = list(self._5m_bars)
+        if not bars:
+            return pd.DataFrame()
+        df = pd.DataFrame(bars)
+        if "time" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["time"]):
+            df["time"] = pd.to_datetime(df["time"])
+        for col in ["open", "high", "low", "close", "volume"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.sort_values("time").reset_index(drop=True)
+
+    def get_current_1m(self) -> dict:
+        """Get the current developing 1-minute candle."""
+        with self._lock:
+            return dict(self._cur_1m)
+
+    def get_current_5m(self) -> dict:
+        """Get the current developing 5-minute candle."""
+        with self._lock:
+            return dict(self._cur_5m)
+
+    # ================================================================
+    # REDIS READERS (for cross-process access)
+    # ================================================================
+
+    @staticmethod
+    def get_1m_df_from_redis(symbol: str) -> pd.DataFrame:
+        """Get 1-minute candles from Redis (accessible from any process)."""
+        raw = get_redis_sync().get(shared_candles_1m(symbol.upper()))
+        if not raw:
+            return pd.DataFrame()
+        bars = json.loads(raw)
+        if not bars:
+            return pd.DataFrame()
+        df = pd.DataFrame(bars)
+        if "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
+        for col in ["open", "high", "low", "close", "volume"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.sort_values("time").reset_index(drop=True)
+
+    @staticmethod
+    def get_5m_df_from_redis(symbol: str) -> pd.DataFrame:
+        """Get 5-minute candles from Redis."""
+        raw = get_redis_sync().get(shared_candles_5m(symbol.upper()))
+        if not raw:
+            return pd.DataFrame()
+        bars = json.loads(raw)
+        if not bars:
+            return pd.DataFrame()
+        df = pd.DataFrame(bars)
+        if "time" in df.columns:
+            df["time"] = pd.to_datetime(df["time"])
+        for col in ["open", "high", "low", "close", "volume"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.sort_values("time").reset_index(drop=True)
+
+    # ================================================================
+    # PER-SYMBOL INSTANCE MANAGEMENT
+    # ================================================================
+
+    _instances: dict[str, "SharedCandleBuilder"] = {}
+    _instances_lock = threading.Lock()
+
+    @classmethod
+    def get_or_create(cls, symbol: str, access_token: str) -> "SharedCandleBuilder":
+        sym = symbol.upper()
+        with cls._instances_lock:
+            if sym not in cls._instances:
+                builder = cls(sym, access_token)
+                cls._instances[sym] = builder
+                builder.start()
+            return cls._instances[sym]
+
+    @classmethod
+    def stop_symbol(cls, symbol: str):
+        sym = symbol.upper()
+        with cls._instances_lock:
+            builder = cls._instances.pop(sym, None)
+            if builder:
+                builder.stop()
+
+    @classmethod
+    def stop_all(cls):
+        with cls._instances_lock:
+            for builder in list(cls._instances.values()):
+                builder.stop()
+            cls._instances.clear()

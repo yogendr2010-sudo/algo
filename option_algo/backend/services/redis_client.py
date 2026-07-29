@@ -1,21 +1,20 @@
-# backend/services/redis_client.py
-# ================================================================
-# Redis connection singletons.
-#
-# Two clients are exposed:
-#   get_redis()       -> redis.asyncio.Redis   (FastAPI / web process)
-#   get_redis_sync()  -> redis.Redis           (worker process /
-#                                                SymbolEngine threads)
-#
-# Both connect to the same REDIS_URL and share the same key-space —
-# this is the backbone that lets the stateless web process(es) and
-# the single worker process communicate:
-#
-#   command_queue  — web -> worker  (start/stop/modify commands)
-#   state_store    — worker -> web  (bot status, positions, OC snapshots)
-#   event_bus      — worker -> web  (live trade/SL/status events -> WS)
-#   rate_limit     — web <-> web    (shared counters across instances)
-# ================================================================
+"""
+Redis connection singletons.
+
+Two clients are exposed:
+  get_redis()       -> redis.asyncio.Redis   (FastAPI / web process)
+  get_redis_sync()  -> redis.Redis           (worker process /
+                                                SymbolEngine threads)
+
+Both connect to the same REDIS_URL and share the same key-space —
+this is the backbone that lets the stateless web process(es) and
+the single worker process communicate:
+
+  command_queue  — web -> worker  (start/stop/modify commands)
+  state_store    — worker -> web  (bot status, positions, OC snapshots)
+  event_bus      — worker -> web  (live trade/SL/status events -> WS)
+  rate_limit     — web <-> web    (shared counters across instances)
+"""
 
 from functools import lru_cache
 import redis as redis_sync
@@ -37,7 +36,10 @@ def get_redis_sync() -> "redis_sync.Redis":
         settings.REDIS_URL,
         decode_responses=True,
         socket_keepalive=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
         health_check_interval=30,
+        retry_on_timeout=True,
     )
 
 
@@ -50,8 +52,31 @@ def get_redis() -> "redis_async.Redis":
         settings.REDIS_URL,
         decode_responses=True,
         socket_keepalive=True,
+        socket_connect_timeout=5,
+        socket_timeout=5,
         health_check_interval=30,
+        retry_on_timeout=True,
     )
+
+
+async def close():
+    """Close async Redis connection and clear cache for clean shutdown."""
+    try:
+        client = get_redis()
+        await client.aclose()
+    except Exception:
+        pass
+    get_redis.cache_clear()
+
+
+def close_sync():
+    """Close sync Redis connection and clear cache for clean shutdown."""
+    try:
+        client = get_redis_sync()
+        client.close()
+    except Exception:
+        pass
+    get_redis_sync.cache_clear()
 
 
 async def ping() -> bool:

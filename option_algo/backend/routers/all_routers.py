@@ -1409,6 +1409,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, token: str = No
         if str(payload.get("sub")) != str(user_id):
             await websocket.close(code=4001)
             return
+        if payload.get("type") != "access":
+            await websocket.close(code=4001)
+            return
     except Exception:
         await websocket.close(code=4001)
         return
