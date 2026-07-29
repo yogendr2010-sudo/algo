@@ -45,6 +45,7 @@ class MetricsCollector:
 
     def __init__(self):
         self._r = get_redis_sync()
+        self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._history: dict[str, deque] = {
