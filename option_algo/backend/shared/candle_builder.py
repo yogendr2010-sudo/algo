@@ -205,7 +205,7 @@ class SharedCandleBuilder:
                         r = self._r
                         r.publish(shared_candle_close_channel(self.symbol),
                                   json.dumps({"symbol": self.symbol, "interval": "1m",
-                                              "candle": closed, "ts": now_1m}))
+                                              "candle": closed, "ts": now_1m}, default=str))
 
                         # Check if 5m boundary
                         minute_part = int(now_1m.split(":")[1])
@@ -284,7 +284,7 @@ class SharedCandleBuilder:
         # Publish 5m close event
         self._r.publish(shared_candle_close_channel(self.symbol),
                         json.dumps({"symbol": self.symbol, "interval": "5m",
-                                    "candle": candle_5m, "ts": minute_str}))
+                                    "candle": candle_5m, "ts": minute_str}, default=str))
 
     # ================================================================
     # DATA READERS — for downstream consumers
