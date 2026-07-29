@@ -55,7 +55,7 @@ async def create_invoice_record(db: AsyncSession, payment: Payment, user: User,
         base_amount=payment.base_amount,
         gst_amount=payment.gst_amount,
         total_amount=payment.total_amount,
-        billing_snapshot=json.dumps(snapshot),
+        billing_snapshot=json.dumps(snapshot, default=str),
         issued_at=datetime.utcnow(),
     )
     return await InvoiceRepository(db).create(invoice)

@@ -23,7 +23,7 @@ async def log_event(db: AsyncSession, user_id: Optional[int], event_type: str,
         event_type=event_type,
         description=description,
         ip_address=ip_address,
-        log_metadata=json.dumps(metadata) if metadata else None,
+        log_metadata=json.dumps(metadata, default=str) if metadata else None,
     )
     db.add(entry)
     await db.flush()

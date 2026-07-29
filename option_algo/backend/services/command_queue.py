@@ -20,6 +20,7 @@
 
 import json
 import uuid
+import time
 import asyncio
 from typing import Optional
 
@@ -54,7 +55,7 @@ async def push_command(action: str, user_id: int, payload: Optional[dict] = None
     queue_len = await r.llen(QUEUE_KEY)
     if queue_len >= MAX_QUEUE_LENGTH:
         return None  # caller should treat None as "rejected — queue full"
-    await r.lpush(QUEUE_KEY, json.dumps(cmd))
+    await r.lpush(QUEUE_KEY, json.dumps(cmd, default=str))
     return cmd_id
 
 
@@ -100,7 +101,7 @@ def send_command_sync(action: str, user_id: int, payload: Optional[dict] = None,
     queue_len = r.llen(QUEUE_KEY)
     if queue_len >= MAX_QUEUE_LENGTH:
         return {"ok": False, "error": "Command queue is full — please retry shortly"}
-    r.lpush(QUEUE_KEY, json.dumps(cmd))
+    r.lpush(QUEUE_KEY, json.dumps(cmd, default=str))
 
     key      = f"bot:cmd_result:{cmd_id}"
     deadline = time.time() + timeout

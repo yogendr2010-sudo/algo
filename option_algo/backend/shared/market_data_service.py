@@ -234,7 +234,7 @@ class SharedMarketDataService:
             }
 
             # 1. Store latest tick snapshot in Redis Hash
-            r.hset(shared_tick_buffer(self.symbol), key=token, value=json.dumps(tick))
+            r.hset(shared_tick_buffer(self.symbol), key=token, value=json.dumps(tick, default=str))
 
             # 2. Publish to Redis Stream (tick buffer for replay)
             try:
@@ -244,7 +244,7 @@ class SharedMarketDataService:
                 pass  # Redis Streams not supported (Redis < 5.0)
 
             # 3. Publish to Redis Pub/Sub (real-time)
-            r.publish(shared_tick_channel(self.symbol), json.dumps(tick))
+            r.publish(shared_tick_channel(self.symbol), json.dumps(tick, default=str))
 
         if not has_data:
             return

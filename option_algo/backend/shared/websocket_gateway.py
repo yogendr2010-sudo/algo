@@ -345,9 +345,9 @@ class WSGateway:
                     await self._handle_client_unsubscribe(user_id, msg)
                 elif action == "get_snapshot":
                     await self._handle_snapshot_request(websocket, user_id, msg)
-        except Exception:
-            pass
         except asyncio.CancelledError:
+            pass
+        except Exception:
             pass
 
     async def _handle_client_subscribe(self, user_id: int, msg: dict):
@@ -397,8 +397,8 @@ class WSGateway:
                     "_snapshot": channel,
                     "data": snapshot,
                 })
-            except Exception:
-                pass
+        except Exception as e:
+            print(f"[WS:{user_id}] Connection error: {e}")
 
     async def _get_shared_oc(self, symbol: str, expiry: str) -> dict:
         r = get_async_redis()

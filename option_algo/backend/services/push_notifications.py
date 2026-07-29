@@ -49,7 +49,7 @@ def send_to_subscription_sync(subscription: dict, title: str, body: str,
     """
     if not _PYWEBPUSH_AVAILABLE or not settings.push_enabled:
         return False
-    payload = json.dumps({"title": title, "body": body, "data": data or {}, "tag": tag})
+    payload = json.dumps({"title": title, "body": body, "data": data or {}, "tag": tag}, default=str)
     webpush(
         subscription_info=subscription,
         data=payload,

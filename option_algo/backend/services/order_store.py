@@ -97,7 +97,7 @@ async def get_recent_order_updates(user_id: int, limit: int = 20) -> list:
         raw = await r.get(f"order_update:{oid}")
         if raw:
             try: result.append(json.loads(raw))
-            except: pass
+            except Exception: pass
     return result
 
 

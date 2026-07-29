@@ -106,14 +106,17 @@ async def notify(db: AsyncSession, user: User, event_type: str, **context) -> No
 
     # Email
     html = f"<p>Hi {user.full_name or 'there'},</p><p>{body}</p>"
-    asyncio.create_task(send_html_email(user.email, subject, html, text=body))
+    task = asyncio.create_task(send_html_email(user.email, subject, html, text=body))
+    task.add_done_callback(lambda t: t.exception() and print(f"[notify] email task failed: {t.exception()}"))
 
     # Telegram — per-user creds live on BotConfig
     res = await db.execute(select(BotConfig).where(BotConfig.user_id == user.id))
     cfg = res.scalar_one_or_none()
     if cfg and cfg.telegram_bot_token and cfg.telegram_chat_id:
-        asyncio.create_task(asyncio.to_thread(
+        task = asyncio.create_task(asyncio.to_thread(
             alert_generic, cfg.telegram_bot_token, cfg.telegram_chat_id, subject, body))
+        task.add_done_callback(lambda t: t.exception() and print(f"[notify] telegram task failed: {t.exception()}"))
 
     # Web Push
-    asyncio.create_task(asyncio.to_thread(send_push_sync, user.id, subject, body))
+    task = asyncio.create_task(asyncio.to_thread(send_push_sync, user.id, subject, body))
+    task.add_done_callback(lambda t: t.exception() and print(f"[notify] push task failed: {t.exception()}"))
