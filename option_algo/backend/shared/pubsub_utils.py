@@ -65,7 +65,7 @@ def resilient_pubsub_consumer(
                 if msg and msg.get("type") == "message":
                     try:
                         data = msg.get("data")
-                        if isinstance(data, bytes):
+                        if isinstance(data, (bytes, str)):
                             import json
                             data = json.loads(data)
                         handler(data)
