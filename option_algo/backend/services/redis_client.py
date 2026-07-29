@@ -37,7 +37,7 @@ def get_redis_sync() -> "redis_sync.Redis":
         decode_responses=True,
         socket_keepalive=True,
         socket_connect_timeout=5,
-        socket_timeout=5,
+        socket_timeout=10,
         health_check_interval=30,
         retry_on_timeout=True,
     )
@@ -53,7 +53,7 @@ def get_redis() -> "redis_async.Redis":
         decode_responses=True,
         socket_keepalive=True,
         socket_connect_timeout=5,
-        socket_timeout=5,
+        socket_timeout=10,
         health_check_interval=30,
         retry_on_timeout=True,
     )
