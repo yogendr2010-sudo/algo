@@ -70,7 +70,6 @@ HEARTBEAT_SEC = 8
 
 def _log(msg: str):
     logger.info(msg)
-    print(f"{_now()} [worker] {msg}")
 
 
 # ================================================================
