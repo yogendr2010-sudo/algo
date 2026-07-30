@@ -437,6 +437,7 @@ class SharedWorkerOrchestrator:
         from backend.shared.shared_worker import resolve_start_inputs_sync
 
         config, access_token, error = resolve_start_inputs_sync(user_id)
+        print(f"{_now()} [shared-orch:start] user={user_id} token_preview={access_token[:20] + '...' + access_token[-10:] if access_token and len(access_token) > 30 else '***'}")
         if error:
             return {"ok": False, "error": error}
 

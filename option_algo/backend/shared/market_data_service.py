@@ -182,6 +182,9 @@ class SharedMarketDataService:
         streamer.on("close", on_close)
 
         streamer.connect()
+        connected = self._connected.wait(timeout=10)
+        if not connected:
+            raise TimeoutError("WebSocket connection timeout")
 
     def _process_message(self, msg: dict):
         """
