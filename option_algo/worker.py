@@ -302,20 +302,11 @@ def _get_engines(user_id: int):
 
 
 def _handle_start(main_loop: asyncio.AbstractEventLoop, user_id: int) -> dict:
-    if USE_SHARED:
-        # Use same approach as legacy mode - run on main event loop
-        from backend.services.bot_config_builder import resolve_start_inputs
-        try:
-            fut = asyncio.run_coroutine_threadsafe(resolve_start_inputs(user_id), main_loop)
-            config, access_token, error = fut.result(timeout=15)
-        except Exception as e:
-            return {"ok": False, "error": f"start failed: {e}"}
-    else:
+    try:
         fut = asyncio.run_coroutine_threadsafe(resolve_start_inputs(user_id), main_loop)
-        try:
-            config, access_token, error = fut.result(timeout=15)
-        except Exception as e:
-            return {"ok": False, "error": f"start failed: {e}"}
+        config, access_token, error = fut.result(timeout=15)
+    except Exception as e:
+        return {"ok": False, "error": f"start failed: {e}"}
 
     if error:
         return {"ok": False, "error": error}
