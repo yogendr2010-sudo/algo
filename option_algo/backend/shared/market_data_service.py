@@ -53,6 +53,7 @@ class SharedMarketDataService:
     def __init__(self, symbol: str, access_token: str):
         self.symbol = symbol.upper()
         self.access_token = access_token
+        print(f"{_now()} [shared_md:{self.symbol}] Token received: {access_token[:20]}...{access_token[-10:] if len(access_token) > 30 else '***'}")
         self._stop_event = threading.Event()
         self._streamer: Optional[object] = None
         self._streamer_lock = threading.Lock()
@@ -61,6 +62,7 @@ class SharedMarketDataService:
 
         # Get the streamer token from cache/admin config
         self._token = get_streamer_token(self.symbol)
+        print(f"{_now()} [shared_md:{self.symbol}] Instrument token: {self._token}")
 
         # Track additional token subscriptions (option instruments)
         self._additional_tokens: set[str] = set()
@@ -146,6 +148,7 @@ class SharedMarketDataService:
         """Connect to Upstox WebSocket and process messages."""
         cfg = upstox_client.Configuration()
         cfg.access_token = self.access_token
+        print(f"{_now()} [shared_md:{self.symbol}] Connecting with token: {self.access_token[:20]}...{self.access_token[-10:] if len(self.access_token) > 30 else '***'}")
         streamer = upstox_client.MarketDataStreamerV3(upstox_client.ApiClient(cfg))
         with self._streamer_lock:
             self._streamer = streamer
