@@ -23,6 +23,7 @@ from backend.shared.redis_infra import (
     shared_market_structure_5m,
     shared_market_structure_state,
 )
+from backend.shared.shared_cache import STRUCTURE_TTL_SEC
 from backend.services.redis_client import get_redis_sync
 
 
