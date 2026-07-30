@@ -153,6 +153,8 @@ class SharedMarketDataService:
         with self._streamer_lock:
             self._streamer = streamer
 
+        connection_closed = threading.Event()
+
         def on_open():
             self._connected.set()
             print(f"{_now()} [shared_md:{self.symbol}] Stream open")
@@ -174,6 +176,7 @@ class SharedMarketDataService:
 
         def on_close(code, reason):
             self._connected.clear()
+            connection_closed.set()
             print(f"{_now()} [shared_md:{self.symbol}] Stream closed: {code}")
 
         streamer.on("open", on_open)
@@ -185,6 +188,7 @@ class SharedMarketDataService:
         connected = self._connected.wait(timeout=10)
         if not connected:
             raise TimeoutError("WebSocket connection timeout")
+        connection_closed.wait()
 
     def _process_message(self, msg: dict):
         """
