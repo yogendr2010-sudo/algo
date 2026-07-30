@@ -59,6 +59,23 @@ async def push_command(action: str, user_id: int, payload: Optional[dict] = None
     return cmd_id
 
 
+async def wait_for_result(cmd_id: str, timeout: float = RESULT_WAIT_SEC) -> Optional[dict]:
+    """
+    Poll Redis for the result of a command. Returns the result dict
+    when the worker posts it, or None on timeout.
+    """
+    key = f"bot:cmd_result:{cmd_id}"
+    r = get_redis()
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        raw = await r.get(key)
+        if raw:
+            await r.delete(key)
+            return json.loads(raw)
+        await asyncio.sleep(POLL_INTERVAL)
+    return None
+
+
 async def send_command(action: str, user_id: int, payload: Optional[dict] = None,
                         timeout: float = RESULT_WAIT_SEC) -> dict:
     """
