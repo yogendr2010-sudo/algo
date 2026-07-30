@@ -140,24 +140,30 @@ class SharedCandleBuilder:
                   ex=CANDLE_TTL_SEC)
 
             if self._cur_1m:
-                r.hset(shared_candle_current_1m(self.symbol), mapping={
+                hkey = shared_candle_current_1m(self.symbol)
+                r.delete(hkey)  # Clear old hash
+                for field, value in {
                     "open": str(self._cur_1m.get("open", 0)),
                     "high": str(self._cur_1m.get("high", 0)),
                     "low": str(self._cur_1m.get("low", 0)),
                     "close": str(self._cur_1m.get("close", 0)),
                     "volume": str(self._cur_1m.get("volume", 0)),
                     "minute": self._cur_1m_min or "",
-                })
+                }.items():
+                    r.hset(hkey, field, value)
 
             if self._cur_5m:
-                r.hset(shared_candle_current_5m(self.symbol), mapping={
+                hkey = shared_candle_current_5m(self.symbol)
+                r.delete(hkey)
+                for field, value in {
                     "open": str(self._cur_5m.get("open", 0)),
                     "high": str(self._cur_5m.get("high", 0)),
                     "low": str(self._cur_5m.get("low", 0)),
                     "close": str(self._cur_5m.get("close", 0)),
                     "volume": str(self._cur_5m.get("volume", 0)),
                     "minute": self._cur_5m_min or "",
-                })
+                }.items():
+                    r.hset(hkey, field, value)
 
     def _loop(self):
         """Main candle building loop — subscribes to tick channel."""
@@ -226,14 +232,17 @@ class SharedCandleBuilder:
                 self._cur_1m["volume"] = self._cur_1m.get("volume", 0) + ltq
 
             # Update current 1m in Redis
-            self._r.hset(shared_candle_current_1m(self.symbol), mapping={
+            hkey = shared_candle_current_1m(self.symbol)
+            self._r.delete(hkey)
+            for field, value in {
                 "open": str(self._cur_1m["open"]),
                 "high": str(self._cur_1m["high"]),
                 "low": str(self._cur_1m["low"]),
                 "close": str(self._cur_1m["close"]),
                 "volume": str(self._cur_1m["volume"]),
                 "minute": self._cur_1m_min,
-            })
+            }.items():
+                self._r.hset(hkey, field, value)
 
     def _close_1m_bar(self) -> Optional[dict]:
         """Close the current 1-minute bar and append to the list."""
