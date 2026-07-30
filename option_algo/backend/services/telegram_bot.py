@@ -358,6 +358,30 @@ COMMANDS = {
 }
 
 
+def _process_callback_query(bot_token: str, callback_query_id: str, action: str, trade_id: int,
+                             user_id: int, chat_id: str):
+    """Handle inline button callback from Telegram."""
+    from backend.services.command_queue import send_command_sync
+    
+    cmd = "approve_pending_trade" if action == "approve" else "reject_pending_trade"
+    
+    try:
+        result = send_command_sync(cmd, user_id, {"trade_id": trade_id}, timeout=15.0)
+        if result.get("ok"):
+            answer_text = f"✅ Trade #{trade_id} approved" if action == "approve" else f"❌ Trade #{trade_id} rejected"
+        else:
+            answer_text = f"❌ Error: {result.get('error', 'Unknown error')}"
+    except Exception as e:
+        answer_text = f"❌ Error: {e}"
+    
+    # Answer callback query (shows popup notification in Telegram)
+    _tg_get(bot_token, "answerCallbackQuery", {
+        "callback_query_id": callback_query_id,
+        "text": answer_text,
+        "show_alert": True,
+    })
+
+
 def dispatch_command(user_id: int, bot_token: str,
                      chat_id: str, text: str):
     parts   = text.strip().split()
@@ -412,12 +436,26 @@ def start_polling(user_id: int, bot_token: str, chat_id: str,
                 result = _tg_get(bot_token, "getUpdates", {
                     "offset":  offset,
                     "timeout": 2,
-                    "allowed_updates": ["message"],
+                    "allowed_updates": ["message", "callback_query"],
                 })
                 if result and result.get("ok"):
                     for update in result.get("result", []):
                         offset = update["update_id"] + 1
                         _poll_offsets[bot_token] = offset
+                        
+                        # Handle callback queries (inline button clicks)
+                        if "callback_query" in update:
+                            callback = update["callback_query"]
+                            callback_data = callback.get("data", "")
+                            callback_id = callback["id"]
+                            
+                            if callback_data.startswith("approve_") or callback_data.startswith("reject_"):
+                                action = "approve" if callback_data.startswith("approve_") else "reject"
+                                trade_id = int(callback_data.split("_")[1])
+                                _process_callback_query(bot_token, callback_id, action, trade_id, user_id, chat_id)
+                            continue
+                        
+                        # Handle regular messages
                         msg = update.get("message", {})
                         if not msg:
                             continue

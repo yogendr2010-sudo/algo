@@ -21,7 +21,7 @@ def _now() -> str:
 
 
 def _send_message(bot_token: str, chat_id: str, text: str,
-                  parse_mode: str = "HTML") -> bool:
+                  parse_mode: str = "HTML", reply_markup: dict = None) -> bool:
     """
     Sends a Telegram message synchronously.
     Returns True on success, False on failure.
@@ -31,11 +31,14 @@ def _send_message(bot_token: str, chat_id: str, text: str,
         return False
     try:
         url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        resp = requests.post(url, json={
+        payload = {
             "chat_id":    chat_id,
             "text":       text,
             "parse_mode": parse_mode,
-        }, timeout=5)
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        resp = requests.post(url, json=payload, timeout=5)
         return resp.status_code == 200
     except Exception as e:
         print(f"[Telegram] Send failed: {e}")
@@ -244,8 +247,8 @@ def alert_pending_trade(bot_token: str, chat_id: str,
                         trading_symbol: Optional[str] = None):
     """
     Sent when a SEMI_AUTO trade signal is generated and requires
-    user approval. Includes trade details and instructions to
-    approve or reject via Telegram command.
+    user approval. Includes trade details and inline buttons to
+    approve or reject directly from Telegram.
     """
     sym_display = trading_symbol or symbol
     text = (
@@ -262,13 +265,21 @@ def alert_pending_trade(bot_token: str, chat_id: str,
         text += f"\n⏰ Expires: {expires_at}\n"
     text += (
         f"\n"
-        f"✅ To APPROVE:  /approve_{trade_id}\n"
-        f"❌ To REJECT:   /reject_{trade_id}\n"
-        f"\n"
         f"<i>Or use the dashboard to review all pending trades.</i>\n"
         f"Time: {_now()}"
     )
-    _send_message(bot_token, chat_id, text)
+    
+    # Inline keyboard with Approve/Reject buttons
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Approve", "callback_data": f"approve_{trade_id}"},
+                {"text": "❌ Reject", "callback_data": f"reject_{trade_id}"}
+            ]
+        ]
+    }
+    
+    _send_message(bot_token, chat_id, text, reply_markup=reply_markup)
 
 
 def test_telegram(bot_token: str, chat_id: str) -> bool:
