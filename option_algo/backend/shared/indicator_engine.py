@@ -201,9 +201,10 @@ class SharedIndicatorEngine:
         """Store indicators in Redis."""
         r = self._r
         # Store as hash for fast field access
-        r.hset(shared_indicators(self.symbol), mapping={
-            k: str(v) for k, v in indicators.items()
-        })
+        pipe = r.pipeline()
+        for k, v in indicators.items():
+            pipe.hset(shared_indicators(self.symbol), k, str(v))
+        pipe.execute()
         r.expire(shared_indicators(self.symbol), INDICATOR_TTL_SEC)
 
         # Also store full JSON

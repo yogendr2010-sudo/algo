@@ -68,7 +68,6 @@ def resilient_pubsub_consumer(
                         if isinstance(data, (bytes, str)):
                             import json
                             data = json.loads(data)
-                        print(f"{_now()} [{tag}] Received: {str(data)[:200]}")
                         handler(data)
                     except Exception as e:
                         print(f"{_now()} [{tag}] handler err: {e}")
