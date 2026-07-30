@@ -1,9 +1,9 @@
 # backend/shared/market_data_service.py
 # ================================================================
-# Shared Market Data Service — ONE broker WebSocket per symbol.
+# Shared Market Data Service — ONE broker WebSocket for ALL symbols.
 #
 # Responsibilities:
-#   - Maintain ONE Upstox WebSocket connection per active symbol
+#   - Maintain ONE Upstox WebSocket connection for all active symbols
 #   - Receive live ticks from Upstox feed
 #   - Validate and normalize market data
 #   - Publish ticks to Redis Stream (tick buffer)
@@ -11,15 +11,13 @@
 #   - Maintain latest tick snapshot in Redis Hash
 #   - Auto-reconnect on disconnect
 #   - Lifecycle managed via symbol_manager reference counts
-#
-# This replaces the per-user _start_streamer() in SymbolEngine.
 # ================================================================
 
 import json
 import threading
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Callable
 
 import upstox_client
 
@@ -29,7 +27,6 @@ from backend.shared.redis_infra import (
     shared_tick_channel,
     TICK_STREAM_MAXLEN,
 )
-from backend.shared.symbol_manager import get_subscriber_count, is_symbol_active
 from backend.shared.shared_cache import get_streamer_token
 from backend.services.redis_client import get_redis_sync
 
@@ -38,285 +35,271 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-class SharedMarketDataService:
-    """
-    Per-symbol shared market data feed. Only ONE instance exists per
-    active symbol, regardless of how many users trade that symbol.
-
-    Usage:
-        svc = SharedMarketDataService("NIFTY", access_token)
-        svc.start()
-        ...
-        svc.stop()
-    """
-
-    def __init__(self, symbol: str, access_token: str):
-        self.symbol = symbol.upper()
+class _GlobalStreamer:
+    """Singleton Upstox WebSocket connection shared across all symbols."""
+    
+    _instance: Optional["_GlobalStreamer"] = None
+    _lock = threading.Lock()
+    
+    def __new__(cls, access_token: str):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
+    
+    def __init__(self, access_token: str):
+        if self._initialized:
+            return
         self.access_token = access_token
-        print(f"{_now()} [shared_md:{self.symbol}] Token received: {access_token[:20]}...{access_token[-10:] if len(access_token) > 30 else '***'}")
-        self._stop_event = threading.Event()
         self._streamer: Optional[object] = None
         self._streamer_lock = threading.Lock()
-        self._thread: Optional[threading.Thread] = None
         self._connected = threading.Event()
-
-        # Get the streamer token from cache/admin config
-        self._token = get_streamer_token(self.symbol)
-        print(f"{_now()} [shared_md:{self.symbol}] Instrument token: {self._token}")
-
-        # Track additional token subscriptions (option instruments)
-        self._additional_tokens: set[str] = set()
+        self._stop_event = threading.Event()
+        self._subscribed_tokens: set = set()
         self._tokens_lock = threading.Lock()
-
-    @property
-    def is_connected(self) -> bool:
-        return self._connected.is_set()
-
+        self._tick_callbacks: Dict[str, Callable] = {}
+        self._callbacks_lock = threading.Lock()
+        self._thread: Optional[threading.Thread] = None
+        self._initialized = True
+    
     def start(self):
-        """Start the WebSocket connection in a background daemon thread."""
         if self._thread and self._thread.is_alive():
             return
-        self._thread = threading.Thread(
-            target=self._run, daemon=True,
-            name=f"shared-md-{self.symbol}",
-        )
+        self._thread = threading.Thread(target=self._run, daemon=True, name="global-md-streamer")
         self._thread.start()
-        print(f"{_now()} [shared_md:{self.symbol}] Started")
-
+        print(f"{_now()} [global_md] Starting global streamer")
+    
     def stop(self):
-        """Stop the WebSocket connection."""
         self._stop_event.set()
         with self._streamer_lock:
-            streamer = self._streamer
-            self._streamer = None
-        if streamer:
+            if self._streamer:
+                try:
+                    self._streamer.disconnect()
+                except:
+                    pass
+        print(f"{_now()} [global_md] Stopped")
+    
+    def subscribe_token(self, token: str, callback: Callable):
+        """Subscribe to a token's ticks and register callback."""
+        with self._tokens_lock:
+            if token not in self._subscribed_tokens:
+                self._subscribed_tokens.add(token)
+                if self._streamer and self._connected.is_set():
+                    try:
+                        self._streamer.subscribe([token], "full")
+                        print(f"{_now()} [global_md] Subscribed: {token}")
+                    except Exception as e:
+                        print(f"{_now()} [global_md] Subscribe err for {token}: {e}")
+        
+        with self._callbacks_lock:
+            self._tick_callbacks[token] = callback
+    
+    def unsubscribe_token(self, token: str):
+        """Unsubscribe a token."""
+        with self._tokens_lock:
+            self._subscribed_tokens.discard(token)
+        with self._callbacks_lock:
+            self._tick_callbacks.pop(token, None)
+        
+        if self._streamer and self._connected.is_set():
             try:
-                streamer.disconnect()
-            except Exception:
-                pass
-        print(f"{_now()} [shared_md:{self.symbol}] Stopped")
-
-    def subscribe_option(self, instrument_key: str):
-        """Add an option instrument key to the stream subscription."""
-        with self._tokens_lock:
-            if instrument_key not in self._additional_tokens:
-                self._additional_tokens.add(instrument_key)
-                with self._streamer_lock:
-                    streamer = self._streamer
-                if streamer:
-                    try:
-                        streamer.subscribe([instrument_key], "full")
-                    except Exception as e:
-                        print(f"{_now()} [shared_md:{self.symbol}] sub opt err: {e}")
-
-    def unsubscribe_option(self, instrument_key: str):
-        """Remove an option instrument key from the stream subscription."""
-        with self._tokens_lock:
-            if instrument_key in self._additional_tokens:
-                self._additional_tokens.discard(instrument_key)
-                with self._streamer_lock:
-                    streamer = self._streamer
-                if streamer:
-                    try:
-                        streamer.unsubscribe([instrument_key])
-                    except Exception as e:
-                        print(f"{_now()} [shared_md:{self.symbol}] unsub opt err: {e}")
-
-    def get_subscribed_tokens(self) -> list[str]:
-        """Get all currently subscribed tokens."""
-        tokens = [self._token]
-        with self._tokens_lock:
-            tokens.extend(sorted(self._additional_tokens))
-        return tokens
-
+                self._streamer.unsubscribe([token])
+                print(f"{_now()} [global_md] Unsubscribed: {token}")
+            except Exception as e:
+                print(f"{_now()} [global_md] Unsubscribe err for {token}: {e}")
+    
     def _run(self):
-        """Main WebSocket loop with auto-reconnect."""
         while not self._stop_event.is_set():
             try:
                 self._connect_and_stream()
             except Exception as e:
-                print(f"{_now()} [shared_md:{self.symbol}] Stream error: {e}")
+                print(f"{_now()} [global_md] Stream error: {e}")
             finally:
                 with self._streamer_lock:
                     self._streamer = None
-
+                    self._connected.clear()
+            
             if not self._stop_event.is_set():
-                print(f"{_now()} [shared_md:{self.symbol}] Reconnecting in 3s...")
+                print(f"{_now()} [global_md] Reconnecting in 3s...")
                 time.sleep(3)
-
+    
     def _connect_and_stream(self):
-        """Connect to Upstox WebSocket and process messages."""
         cfg = upstox_client.Configuration()
         cfg.access_token = self.access_token
-        print(f"{_now()} [shared_md:{self.symbol}] Connecting with token: {self.access_token[:20]}...{self.access_token[-10:] if len(self.access_token) > 30 else '***'}")
+        print(f"{_now()} [global_md] Connecting...")
         streamer = upstox_client.MarketDataStreamerV3(upstox_client.ApiClient(cfg))
         with self._streamer_lock:
             self._streamer = streamer
-
+        
         connection_closed = threading.Event()
-
+        
         def on_open():
             self._connected.set()
-            print(f"{_now()} [shared_md:{self.symbol}] Stream open")
-            tokens = self.get_subscribed_tokens()
-            try:
-                streamer.subscribe(tokens, "full")
-                print(f"{_now()} [shared_md:{self.symbol}] Subscribed: {tokens}")
-            except Exception as e:
-                print(f"{_now()} [shared_md:{self.symbol}] Subscribe err: {e}")
-
+            print(f"{_now()} [global_md] Stream open")
+            with self._tokens_lock:
+                tokens = list(self._subscribed_tokens)
+            if tokens:
+                try:
+                    streamer.subscribe(tokens, "full")
+                    print(f"{_now()} [global_md] Subscribed {len(tokens)} tokens")
+                except Exception as e:
+                    print(f"{_now()} [global_md] Subscribe err: {e}")
+        
         def on_message(msg):
             try:
-                self._process_message(msg)
+                feeds = msg.get("feeds", {})
+                for token, feed in feeds.items():
+                    if isinstance(feed, dict):
+                        full = feed.get("fullFeed", {})
+                        if isinstance(full, dict):
+                            with self._callbacks_lock:
+                                callback = self._tick_callbacks.get(token)
+                            if callback:
+                                callback(token, full)
             except Exception as e:
-                print(f"{_now()} [shared_md:{self.symbol}] msg err: {e}")
-
+                print(f"{_now()} [global_md] msg err: {e}")
+        
         def on_error(e):
-            print(f"{_now()} [shared_md:{self.symbol}] Stream err: {e}")
-
+            print(f"{_now()} [global_md] Stream err: {e}")
+        
         def on_close(code, reason):
             self._connected.clear()
             connection_closed.set()
-            print(f"{_now()} [shared_md:{self.symbol}] Stream closed: {code}")
-
+            print(f"{_now()} [global_md] Stream closed: {code}")
+        
         streamer.on("open", on_open)
         streamer.on("message", on_message)
         streamer.on("error", on_error)
         streamer.on("close", on_close)
-
+        
         streamer.connect()
         connected = self._connected.wait(timeout=10)
         if not connected:
             raise TimeoutError("WebSocket connection timeout")
         connection_closed.wait()
 
-    def _process_message(self, msg: dict):
-        """
-        Process an Upstox WebSocket message.
-        Extract LTP/volume for all subscribed tokens and publish to Redis.
-        """
+
+_global_streamer: Optional[_GlobalStreamer] = None
+_streamer_init_lock = threading.Lock()
+
+
+def _get_global_streamer(access_token: str) -> _GlobalStreamer:
+    """Get or create the global streamer singleton."""
+    global _global_streamer
+    with _streamer_init_lock:
+        if _global_streamer is None:
+            _global_streamer = _GlobalStreamer(access_token)
+            _global_streamer.start()
+        return _global_streamer
+
+
+class SharedMarketDataService:
+    """
+    Per-symbol shared market data feed. All symbols share ONE
+    underlying WebSocket connection via _GlobalStreamer.
+    """
+
+    _instances: Dict[str, "SharedMarketDataService"] = {}
+    _instances_lock = threading.Lock()
+
+    def __init__(self, symbol: str, access_token: str):
+        self.symbol = symbol.upper()
+        self.access_token = access_token
+        self._streamer = _get_global_streamer(access_token)
+        self._token = get_streamer_token(self.symbol)
+        print(f"{_now()} [shared_md:{self.symbol}] Token received: {access_token[:20]}...{access_token[-10:] if len(access_token) > 30 else '***'}")
+        print(f"{_now()} [shared_md:{self.symbol}] Instrument token: {self._token}")
+        self._additional_tokens: set = set()
+        self._tokens_lock = threading.Lock()
+
+    def start(self):
+        self._streamer.subscribe_token(self._token, self._on_tick)
+        print(f"{_now()} [shared_md:{self.symbol}] Started")
+
+    def stop(self):
+        with self._tokens_lock:
+            all_tokens = {self._token} | self._additional_tokens.copy()
+        for token in all_tokens:
+            self._streamer.unsubscribe_token(token)
+        print(f"{_now()} [shared_md:{self.symbol}] Stopped")
+        with self._instances_lock:
+            self._instances.pop(self.symbol, None)
+
+    def subscribe_option(self, instrument_key: str):
+        with self._tokens_lock:
+            if instrument_key not in self._additional_tokens:
+                self._additional_tokens.add(instrument_key)
+                self._streamer.subscribe_token(instrument_key, self._on_tick)
+
+    def unsubscribe_option(self, instrument_key: str):
+        with self._tokens_lock:
+            if instrument_key in self._additional_tokens:
+                self._additional_tokens.discard(instrument_key)
+                self._streamer.unsubscribe_token(instrument_key)
+
+    def _on_tick(self, token: str, feed: dict):
+        """Process tick and publish to Redis."""
         r = get_redis_sync()
         now = datetime.now()
         now_str = now.strftime("%Y-%m-%d %H:%M:%S.%f")[:23]
         timestamp = now.timestamp()
 
-        if not isinstance(msg, dict):
+        ltp = feed.get("ltp")
+        ltq = feed.get("ltq", 0)
+
+        if ltp is None:
             return
 
-        feeds = msg.get("feeds", {})
-        if not feeds:
-            return
+        tick = {
+            "symbol": self.symbol,
+            "token": token,
+            "ltp": float(ltp),
+            "ltq": float(ltq) if ltq else 0.0,
+            "ts": now_str,
+            "timestamp": timestamp,
+        }
 
-        has_data = False
-
-        for token, feed in feeds.items():
-            full = feed.get("fullFeed", {})
-            if not isinstance(full, dict):
-                continue
-
-            ltp = None
-            ltq = 0.0
-
-            if "marketFF" in full and full["marketFF"].get("ltpc"):
-                ltpc = full["marketFF"]["ltpc"]
-                ltp = float(ltpc.get("ltp", 0))
-                ltq_val = ltpc.get("ltq")
-                if ltq_val is not None:
-                    ltq = float(ltq_val)
-            elif "indexFF" in full and full["indexFF"].get("ltpc"):
-                ltp = float(full["indexFF"]["ltpc"]["ltp"])
-            elif full.get("ltp"):
-                ltp = float(full["ltp"])
-
-            if ltp is None or ltp <= 0:
-                continue
-
-            has_data = True
-
-            # Build tick data
-            tick = {
-                "symbol": self.symbol,
-                "token": token,
-                "ltp": ltp,
-                "ltq": ltq,
-                "ts": now_str,
-                "timestamp": timestamp,
-            }
-
-            # 1. Store latest tick snapshot in Redis Hash
+        try:
+            r.xadd(shared_tick_stream(self.symbol), {"data": json.dumps(tick)}, maxlen=TICK_STREAM_MAXLEN)
             r.hset(shared_tick_buffer(self.symbol), key=token, value=json.dumps(tick, default=str))
-
-            # 2. Publish to Redis Stream (tick buffer for replay)
-            try:
-                stream_key = shared_tick_stream(self.symbol)
-                r.xadd(stream_key, tick, maxlen=TICK_STREAM_MAXLEN)
-            except Exception:
-                pass  # Redis Streams not supported (Redis < 5.0)
-
-            # 3. Publish to Redis Pub/Sub (real-time)
             r.publish(shared_tick_channel(self.symbol), json.dumps(tick, default=str))
-
-        if not has_data:
-            return
-
-    # ================================================================
-    # Static factory — manages per-symbol service instances
-    # ================================================================
-
-    _instances: dict[str, "SharedMarketDataService"] = {}
-    _instances_lock = threading.Lock()
+        except Exception as e:
+            print(f"{_now()} [shared_md:{self.symbol}] Redis err: {e}")
 
     @classmethod
     def get_or_create(cls, symbol: str, access_token: str) -> "SharedMarketDataService":
-        """
-        Get or create a SharedMarketDataService for a symbol.
-        Multiple callers for the same symbol get the SAME instance.
-        """
-        sym = symbol.upper()
         with cls._instances_lock:
-            if sym not in cls._instances:
-                svc = cls(sym, access_token)
-                cls._instances[sym] = svc
+            if symbol.upper() not in cls._instances:
+                svc = cls(symbol, access_token)
+                cls._instances[symbol.upper()] = svc
                 svc.start()
-            return cls._instances[sym]
-
-    @classmethod
-    def stop_symbol(cls, symbol: str):
-        """Stop and remove the service for a symbol."""
-        sym = symbol.upper()
-        with cls._instances_lock:
-            svc = cls._instances.pop(sym, None)
-            if svc:
-                svc.stop()
+            return cls._instances[symbol.upper()]
 
     @classmethod
     def stop_all(cls):
-        """Stop all running services."""
+        global _global_streamer
         with cls._instances_lock:
             for svc in list(cls._instances.values()):
                 svc.stop()
             cls._instances.clear()
+        if _global_streamer:
+            _global_streamer.stop()
+            _global_streamer = None
 
     @classmethod
-    def active_symbols(cls) -> list[str]:
-        """Get list of symbols with active services."""
+    def active_symbols(cls) -> list:
         with cls._instances_lock:
             return list(cls._instances.keys())
 
 
-# ================================================================
-# TICK READER — for downstream consumers
-# ================================================================
-
 def read_latest_tick(symbol: str, token: str) -> Optional[dict]:
-    """Read the latest tick snapshot for a token from Redis Hash."""
     raw = get_redis_sync().hget(shared_tick_buffer(symbol), token)
     if raw:
         return json.loads(raw)
     return None
 
 
-def read_all_latest_ticks(symbol: str) -> dict[str, dict]:
-    """Read all latest tick snapshots for a symbol."""
+def read_all_latest_ticks(symbol: str) -> Dict[str, dict]:
     raw = get_redis_sync().hgetall(shared_tick_buffer(symbol))
     return {k: json.loads(v) for k, v in raw.items()}
