@@ -259,7 +259,9 @@ async def resolve_start_inputs(
 
     try:
         access_token = decrypt_token(user.upstox_token_enc)
+        print(f"[bot_config_builder] Decrypted token for user {user_id}: {access_token[:20]}...{access_token[-10:] if len(access_token) > 30 else '***'}")
     except Exception as e:
+        print(f"[bot_config_builder] Decrypt FAILED for user {user_id}: {e}")
         return None, None, f"Failed to decrypt Upstox token: {e}"
 
     config = build_config_dict(cfg)
