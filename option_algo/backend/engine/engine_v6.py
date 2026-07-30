@@ -648,6 +648,11 @@ class SymbolEngine:
         if self._streamer:
             try: self._streamer.disconnect()
             except: pass
+        if self._oc:
+            try:
+                self._oc.stop()
+            except Exception as e:
+                print(_now(), f"[{self.symbol}] OC stop error: {e}")
         if self._tg_token and self._tg_chat:
             tg.alert_bot_stopped(self._tg_token, self._tg_chat, self.symbol)
             if self.cfg.get("telegram_on_summary", True):

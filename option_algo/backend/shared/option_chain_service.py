@@ -69,6 +69,11 @@ class SharedOptionChainService:
 
     def stop(self):
         self._stop_event.set()
+        if self._oc_analyzer and hasattr(self._oc_analyzer, 'stop'):
+            try:
+                self._oc_analyzer.stop()
+            except Exception:
+                pass
         with self._lock:
             self._latest_chain_df = None
             self._latest_analysis = None
