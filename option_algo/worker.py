@@ -156,9 +156,9 @@ async def _on_status_change(user_id: int, status: BotStatus, error_msg: str = No
             cfg.status    = status
             cfg.error_msg = error_msg
             if status == BotStatus.running:
-                cfg.last_started = datetime.utcnow()
+                cfg.last_started = datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             else:
-                cfg.last_stopped = datetime.utcnow()
+                cfg.last_stopped = datetime.now(datetime.timezone.utc).replace(tzinfo=None)
             db.add(cfg)
             await db.commit()
 
@@ -254,9 +254,9 @@ async def _on_trade(user_id: int, trade_data: dict):
             try:
                 raw_entry_ts = datetime.strptime(raw_entry_ts, "%Y-%m-%d %H:%M:%S")
             except Exception:
-                raw_entry_ts = datetime.utcnow()
+                raw_entry_ts = datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         elif raw_entry_ts is None:
-            raw_entry_ts = datetime.utcnow()
+            raw_entry_ts = datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
         t = Trade(
             user_id        = user_id,
@@ -276,7 +276,7 @@ async def _on_trade(user_id: int, trade_data: dict):
             strategy       = trade_data.get("strategy", ""),
             mode           = trade_data.get("mode", "live"),
             entry_ts       = raw_entry_ts,
-            exit_ts        = datetime.utcnow(),
+            exit_ts        = datetime.now(datetime.timezone.utc).replace(tzinfo=None),
         )
         db.add(t)
         await db.commit()
@@ -472,7 +472,7 @@ def _handle_approve_pending_trade(user_id: int, payload: dict,
                     "sl_trigger": signal.stop_loss, "target": target,
                     "near_target": round(target * (1 - near_pct), 2),
                     "strategy": signal.strategy_name or signal.strategy or "",
-                    "entry_ts": datetime.utcnow(),
+                    "entry_ts": datetime.now(datetime.timezone.utc).replace(tzinfo=None),
                     "instrument_key": signal.instrument_key or eng.instrument_key,
                     "trading_symbol": signal.trading_symbol or eng.trading_symbol,
                     "opt_type": signal.opt_type or eng.opt_type,
@@ -620,7 +620,7 @@ def _expire_stale_sync():
 
     db = get_sync_session()
     try:
-        now = _dt.utcnow()
+        now = _dt.now(_dt.timezone.utc).replace(tzinfo=None)
         expired = db.execute(
             _select(PendingTrade).where(
                 PendingTrade.status == PendingTradeStatus.WAITING,
