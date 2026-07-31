@@ -20,6 +20,51 @@ def _now() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+def _tts_mp3(text: str, lang: str = "en") -> Optional[bytes]:
+    """
+    Generate speech audio (MP3) for `text` using Google Translate TTS
+    (free, no API key). Returns raw bytes or None on failure.
+    """
+    if not text:
+        return None
+    try:
+        url = "https://translate.google.com/translate_tts"
+        params = {"ie": "UTF-8", "q": text, "tl": lang, "client": "tw-ob"}
+        resp = requests.get(url, params=params, timeout=10,
+                            headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+        return None
+    except Exception as e:
+        print(f"[Telegram] TTS failed: {e}")
+        return None
+
+
+def send_voice_message(bot_token: str, chat_id: str, text: str,
+                       lang: str = "en") -> bool:
+    """
+    Send a Telegram voice message generated from `text`.
+    Returns True on success, False on failure (incl. TTS failure).
+    """
+    if not bot_token or not chat_id or not text:
+        return False
+    try:
+        audio = _tts_mp3(text, lang=lang)
+        if not audio:
+            return False
+        url = f"https://api.telegram.org/bot{bot_token}/sendVoice"
+        resp = requests.post(
+            url,
+            data={"chat_id": chat_id},
+            files={"voice": ("alert.mp3", audio, "audio/mpeg")},
+            timeout=15,
+        )
+        return resp.status_code == 200
+    except Exception as e:
+        print(f"[Telegram] Voice send failed: {e}")
+        return False
+
+
 def _send_message(bot_token: str, chat_id: str, text: str,
                   parse_mode: str = "HTML", reply_markup: dict = None) -> bool:
     """
@@ -280,6 +325,15 @@ def alert_pending_trade(bot_token: str, chat_id: str,
     }
     
     _send_message(bot_token, chat_id, text, reply_markup=reply_markup)
+
+    # Voice alert so the user is alerted even if not watching the chat
+    voice_text = (
+        f"Trade alert. Pending trade {trade_id}. "
+        f"{sym_display} {opt_type}. Entry {entry_price}. "
+        f"Stop loss {sl}. Quantity {quantity}. "
+        f"Please approve or reject."
+    )
+    send_voice_message(bot_token, chat_id, voice_text)
 
 
 def test_telegram(bot_token: str, chat_id: str) -> bool:
