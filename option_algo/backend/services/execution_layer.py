@@ -222,6 +222,32 @@ class PaperExecutor:
                 signal_id=self.signal.signal_id,
             )
 
+    def execute_sync(self) -> ExecutionResult:
+        """Sync version of execute() - paper execution has no async ops."""
+        try:
+            ltp = self.signal.entry_price
+            order = self._paper.place_market_order(
+                side="BUY",
+                qty=self.signal.quantity,
+                ltp=ltp,
+                instrument_key=self.signal.instrument_key or "",
+                tag=f"paper:{self.user_id}:{self.signal.signal_id}",
+            )
+            return ExecutionResult(
+                status=ExecutionStatus.EXECUTED,
+                message=f"Paper trade executed at ₹{order.get('fill_price', ltp)}",
+                signal_id=self.signal.signal_id,
+                trade_id=order.get("order_id"),
+                details={"mode": "paper", "fill_price": order.get("fill_price", ltp)},
+            )
+        except Exception as e:
+            return ExecutionResult(
+                status=ExecutionStatus.FAILED,
+                message=f"Paper execution failed: {e}",
+                signal_id=self.signal.signal_id,
+            )
+
+
 
 class SemiAutoExecutor:
     """
@@ -357,6 +383,55 @@ class AutoExecutor:
                 signal_id=self.signal.signal_id,
             )
 
+    def execute_sync(self) -> ExecutionResult:
+        """Sync version of execute() - uses sync consent check."""
+        from backend.db.database import get_sync_session
+        from sqlalchemy import select as _select
+
+        consent_valid = False
+        with get_sync_session() as db:
+            res = db.execute(
+                _select(DailyAutoConsent)
+                .where(DailyAutoConsent.user_id == self.user_id)
+                .order_by(DailyAutoConsent.created_at.desc())
+                .limit(1)
+            )
+            consent = res.scalar_one_or_none()
+            if consent and consent.accepted:
+                if consent.valid_until and consent.valid_until > datetime.now(timezone.utc).replace(tzinfo=None):
+                    consent_valid = True
+
+        if not consent_valid:
+            return ExecutionResult(
+                status=ExecutionStatus.BLOCKED,
+                message="Daily risk disclosure not accepted — "
+                "please accept in Settings before starting auto trading",
+                signal_id=self.signal.signal_id,
+            )
+
+        try:
+            order_id = self._place_order(self.signal)
+            if order_id:
+                return ExecutionResult(
+                    status=ExecutionStatus.EXECUTED,
+                    message=f"Live order placed: {order_id}",
+                    signal_id=self.signal.signal_id,
+                    trade_id=order_id,
+                    details={"mode": "live", "order_id": order_id},
+                )
+            else:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message="Live order placement failed",
+                    signal_id=self.signal.signal_id,
+                )
+        except Exception as e:
+            return ExecutionResult(
+                status=ExecutionStatus.FAILED,
+                message=f"Auto execution failed: {e}",
+                signal_id=self.signal.signal_id,
+            )
+
 
 # ================================================================
 # EXECUTION ROUTER
@@ -443,6 +518,62 @@ class ExecutionRouter:
                 )
             executor = AutoExecutor(user_id, signal, place_order_fn)
             return await executor.execute()
+
+        else:
+            return ExecutionResult(
+                status=ExecutionStatus.FAILED,
+                message=f"Unknown execution mode: {mode}",
+                signal_id=signal.signal_id,
+            )
+
+    def execute_sync(
+        self,
+        user_id: int,
+        signal: TradeSignal,
+        place_order_fn: Optional[Callable] = None,
+    ) -> ExecutionResult:
+        """
+        Sync version of execute() for worker-thread contexts.
+        Avoids cross-event-loop asyncpg operations.
+        """
+        from sqlalchemy import select as _select
+
+        # Fetch execution mode from DB via sync session
+        now = time.time()
+        with self._lock:
+            cached = self._mode_cache.get(user_id)
+            if cached and (now - cached[1]) < self._cache_ttl:
+                mode = ExecutionMode(cached[0])
+            else:
+                mode = None
+
+        if mode is None:
+            from backend.db.database import get_sync_session
+            with get_sync_session() as db:
+                res = db.execute(
+                    _select(BotConfig.execution_mode).where(BotConfig.user_id == user_id)
+                )
+                raw = res.scalar_one_or_none()
+                mode = raw if raw is not None else ExecutionMode.SEMI_AUTO
+            with self._lock:
+                self._mode_cache[user_id] = (mode.value, now)
+
+        if mode == ExecutionMode.PAPER:
+            executor = PaperExecutor(user_id, signal)
+            return executor.execute_sync()
+
+        elif mode == ExecutionMode.SEMI_AUTO:
+            return PendingTradeManager.create_pending_trade_sync(user_id, signal)
+
+        elif mode == ExecutionMode.AUTO:
+            if place_order_fn is None:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message="Auto mode requires a place_order_fn",
+                    signal_id=signal.signal_id,
+                )
+            executor = AutoExecutor(user_id, signal, place_order_fn)
+            return executor.execute_sync()
 
         else:
             return ExecutionResult(

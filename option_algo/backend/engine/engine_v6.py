@@ -2417,27 +2417,11 @@ class SymbolEngine:
         mode = exec_mode.upper() if exec_mode else "PAPER"
 
         if mode == "PAPER":
-            # Route via execution layer - try async first, fallback to sync
+            # Route via execution layer - sync (worker thread context)
             try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(
-                        _global_execution_router.execute(self.user_id, signal)
-                    )
-                    loop.close()
-                    return {"action": "execute", "result": result}
-                except RuntimeError as e:
-                    if "different loop" in str(e) or "event loop is closed" in str(e):
-                        loop.close()
-                        # Fallback to sync execution
-                        from backend.services.execution_layer import pending_trade_manager
-                        result = pending_trade_manager.create_pending_trade_sync(
-                            self.user_id, signal
-                        )
-                        return {"action": "execute", "result": result}
-                    raise
+                from backend.services.execution_layer import PaperExecutor
+                result = PaperExecutor(self.user_id, signal).execute_sync()
+                return {"action": "execute", "result": result}
             except Exception as e:
                 print(_now(), f"[{self.symbol}] ⚠️ Execution layer error: {e}")
                 # Fallback to direct paper mode
@@ -2445,24 +2429,10 @@ class SymbolEngine:
 
         elif mode == "SEMI_AUTO":
             try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(
-                        _global_execution_router.execute(self.user_id, signal)
-                    )
-                    loop.close()
-                except RuntimeError as e:
-                    if "different loop" in str(e) or "event loop is closed" in str(e):
-                        loop.close()
-                        # Fallback to sync
-                        from backend.services.execution_layer import pending_trade_manager
-                        result = pending_trade_manager.create_pending_trade_sync(
-                            self.user_id, signal
-                        )
-                    else:
-                        raise
+                from backend.services.execution_layer import pending_trade_manager
+                result = pending_trade_manager.create_pending_trade_sync(
+                    self.user_id, signal
+                )
 
                 if result.status == ExecutionStatus.PENDING_APPROVAL:
                     print(_now(), f"[{self.symbol}] ⏳ Pending approval #{result.pending_trade_id}")
@@ -2494,13 +2464,9 @@ class SymbolEngine:
 
         elif mode == "AUTO":
             try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(
-                    _global_execution_router.execute(self.user_id, signal, place_order_fn=self._place_order)
+                result = _global_execution_router.execute_sync(
+                    self.user_id, signal, place_order_fn=self._place_order
                 )
-                loop.close()
 
                 if result.status == ExecutionStatus.EXECUTED:
                     return {"action": "execute", "result": result}
