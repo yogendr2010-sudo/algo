@@ -293,6 +293,7 @@
               <label><input type="checkbox" id="va-ev-ORDER_ALERT" onchange="vaUpdate()" /> Order Alerts</label>
               <label><input type="checkbox" id="va-ev-ORDER_UPDATE" onchange="vaUpdate()" /> Order Confirms</label>
               <label><input type="checkbox" id="va-ev-RISK_LIMIT_HIT" onchange="vaUpdate()" /> Risk Limit Hit</label>
+              <label><input type="checkbox" id="va-ev-PENDING_TRADE" onchange="vaUpdate()" /> Pending Trade</label>
             </div>
           </div>
         </div>
@@ -1787,7 +1788,7 @@
                                             function filterFeed() { renderFeed(); }
 
                                             // ── Voice Alerts UI ────────────────────────────────────────────────
-                                            const VA_EVENT_KEYS = ['ENTRY', 'EXIT', 'SL_TRAIL', 'SL_CANCEL', 'BOT_STATUS', 'DIRECTION_CHANGE', 'ORDER_ALERT', 'ORDER_UPDATE', 'RISK_LIMIT_HIT'];
+                                            const VA_EVENT_KEYS = ['ENTRY', 'EXIT', 'SL_TRAIL', 'SL_CANCEL', 'BOT_STATUS', 'DIRECTION_CHANGE', 'ORDER_ALERT', 'ORDER_UPDATE', 'RISK_LIMIT_HIT', 'PENDING_TRADE'];
 
                                             function vaInit() {
                                               const s = VoiceAlerts.settings;

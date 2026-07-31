@@ -335,6 +335,8 @@ class UserExecutionManager:
                     "user_id": self.user_id,
                     "mode": "semi_auto",
                     "symbol": signal.get("symbol"),
+                    "trading_symbol": signal.get("trading_symbol") or signal.get("symbol"),
+                    "opt_type": signal.get("opt_type"),
                     "entry_price": signal.get("entry_price"),
                     "stop_loss": signal.get("stop_loss"),
                     "quantity": signal.get("quantity"),
