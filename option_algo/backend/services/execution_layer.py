@@ -33,7 +33,7 @@ import hashlib
 import threading
 import time
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional, Callable, Any
 from uuid import uuid4
@@ -80,7 +80,7 @@ class TradeSignal:
         if self.strategy_name and not self.strategy:
             self.strategy = self.strategy_name
         if not self.timestamp:
-            self.timestamp = datetime.utcnow().isoformat()
+            self.timestamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 # ================================================================
@@ -173,7 +173,7 @@ async def check_daily_auto_consent(user_id: int) -> bool:
             return False
         if not consent.accepted:
             return False
-        if not consent.valid_until or consent.valid_until <= datetime.utcnow():
+        if not consent.valid_until or consent.valid_until <= datetime.now(timezone.utc).replace(tzinfo=None):
             return False
         return True
 
@@ -245,7 +245,7 @@ class SemiAutoExecutor:
         - Mobile App (future)
         """
         try:
-            expires_at = datetime.utcnow() + timedelta(seconds=self.PENDING_TIMEOUT_SEC)
+            expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=self.PENDING_TIMEOUT_SEC)
 
             pending_trade = PendingTrade(
                 user_id=self.user_id,
@@ -495,7 +495,7 @@ class PendingTradeManager:
                 )
 
             # Check expiration
-            if trade.expires_at and trade.expires_at <= datetime.utcnow():
+            if trade.expires_at and trade.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
                 trade.status = PendingTradeStatus.EXPIRED
                 db.add(trade)
                 await db.commit()
@@ -517,7 +517,7 @@ class PendingTradeManager:
 
                 # Mark as approved
                 trade.status = PendingTradeStatus.APPROVED
-                trade.approved_at = datetime.utcnow()
+                trade.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 db.add(trade)
 
                 # Audit
@@ -615,7 +615,7 @@ class PendingTradeManager:
         from sqlalchemy import select as _select, update as _update
 
         async with AsyncSessionLocal() as db:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             res = await db.execute(
                 _select(PendingTrade).where(
                     PendingTrade.status == PendingTradeStatus.WAITING,
@@ -650,20 +650,17 @@ class PendingTradeManager:
         from backend.services.audit_log import log_event
         
         with get_sync_session() as db:
-            # Store pending trade
-            from datetime import datetime, timedelta
-            expires_at = datetime.utcnow() + timedelta(minutes=5)
+            expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
             
             payload = {
                 "strategy_name": signal.strategy_name,
                 "symbol": signal.symbol,
                 "opt_type": signal.opt_type,
                 "strike": signal.strike,
-                "expiry": signal.expiry,
                 "entry_price": signal.entry_price,
                 "stop_loss": signal.stop_loss,
                 "quantity": signal.quantity,
-                "reason": signal.reason,
+                "reason": getattr(signal, "reason", None),
                 "confidence": signal.confidence,
             }
             
