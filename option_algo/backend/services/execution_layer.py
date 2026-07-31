@@ -645,6 +645,7 @@ class PendingTradeManager:
             try:
                 # Reconstruct signal from stored payload
                 signal_data = json.loads(trade.signal_payload) if trade.signal_payload else {}
+                signal_data.setdefault("direction", "BUY")
                 signal = TradeSignal(**signal_data)
 
                 # Mark as approved
@@ -788,6 +789,7 @@ class PendingTradeManager:
                 "strategy_name": signal.strategy_name,
                 "symbol": signal.symbol,
                 "opt_type": signal.opt_type,
+                "direction": getattr(signal, "direction", "BUY"),
                 "strike": signal.strike,
                 "entry_price": signal.entry_price,
                 "stop_loss": signal.stop_loss,
@@ -870,6 +872,7 @@ class PendingTradeManager:
             try:
                 # Reconstruct signal from stored payload
                 signal_data = json.loads(trade.signal_payload) if trade.signal_payload else {}
+                signal_data.setdefault("direction", "BUY")
                 signal = TradeSignal(**signal_data)
 
                 # Mark as approved
