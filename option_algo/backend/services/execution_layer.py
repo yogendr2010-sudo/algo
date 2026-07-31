@@ -639,6 +639,63 @@ class PendingTradeManager:
                 print(f"[execution_layer] Expired {len(expired)} stale pending trade(s)")
 
 
+    @staticmethod
+    def create_pending_trade_sync(user_id: int, signal: 'TradeSignal') -> 'ExecutionResult':
+        """
+        Synchronously create a pending trade for semi-auto mode.
+        Used when called from sync context (e.g., engine in worker thread).
+        """
+        from backend.db.database import get_sync_session
+        from sqlalchemy import select as _select
+        from backend.services.audit_log import log_event
+        
+        with get_sync_session() as db:
+            # Store pending trade
+            from datetime import datetime, timedelta
+            expires_at = datetime.utcnow() + timedelta(minutes=5)
+            
+            payload = {
+                "strategy_name": signal.strategy_name,
+                "symbol": signal.symbol,
+                "opt_type": signal.opt_type,
+                "strike": signal.strike,
+                "expiry": signal.expiry,
+                "entry_price": signal.entry_price,
+                "stop_loss": signal.stop_loss,
+                "quantity": signal.quantity,
+                "reason": signal.reason,
+                "confidence": signal.confidence,
+            }
+            
+            from backend.db.models import PendingTrade, PendingTradeStatus
+            trade = PendingTrade(
+                user_id=user_id,
+                signal_id=signal.signal_id,
+                symbol=signal.trading_symbol or signal.symbol,
+                opt_type=signal.opt_type,
+                strike=signal.strike,
+                entry_price=signal.entry_price,
+                stop_loss=signal.stop_loss,
+                quantity=signal.quantity,
+                strategy=signal.strategy_name,
+                status=PendingTradeStatus.WAITING,
+                signal_payload=json.dumps(payload),
+                expires_at=expires_at,
+            )
+            db.add(trade)
+            db.commit()
+            
+            return ExecutionResult(
+                status=ExecutionStatus.PENDING_APPROVAL,
+                message="Awaiting user approval",
+                signal_id=signal.signal_id,
+                pending_trade_id=trade.id,
+                details={
+                    "expires_at": expires_at.isoformat(),
+                },
+            )
+
+
 # ================================================================
 # Global Singleton
 # ================================================================

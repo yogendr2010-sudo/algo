@@ -94,29 +94,24 @@ def _send_pending_trade_telegram_alert(user_id: int, trade_data: dict):
     Runs synchronously — safe to call from any thread.
     """
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        async def _fetch():
-            async with AsyncSessionLocal() as db:
-                res = await db.execute(
-                    select(BotConfig).where(BotConfig.user_id == user_id)
-                )
-                cfg = res.scalar_one_or_none()
-                if not cfg:
-                    return None
-                return {
-                    "bot_token": cfg.telegram_bot_token or "",
-                    "chat_id": cfg.telegram_chat_id or "",
-                }
-        result = loop.run_until_complete(_fetch())
-        loop.close()
+        from backend.db.database import get_sync_session
+        from sqlalchemy import select
+        
+        with get_sync_session() as db:
+            res = db.execute(
+                select(BotConfig).where(BotConfig.user_id == user_id)
+            )
+            cfg = res.scalar_one_or_none()
+            if not cfg:
+                _log(f"No BotConfig for user {user_id} - cannot send pending trade alert")
+                return
+            
+            bot_token = cfg.telegram_bot_token or ""
+            chat_id = cfg.telegram_chat_id or ""
 
-        if not result or not result["bot_token"] or not result["chat_id"]:
+        if not bot_token or not chat_id:
             _log(f"No Telegram config for user {user_id} - cannot send pending trade alert")
             return
-
-        bot_token = result["bot_token"]
-        chat_id = result["chat_id"]
 
         from backend.services import telegram_alerts as tg
         trade_id = trade_data.get("pending_trade_id")
@@ -608,22 +603,9 @@ _command_loop_main_loop = None
 
 
 def _expire_stale_pending_trades():
-    """Background task: mark expired pending trades."""
+    """Background task: mark expired pending trades (sync only)."""
     try:
-        from backend.services.execution_layer import pending_trade_manager as ptm
-        if _command_loop_main_loop is not None:
-            fut = asyncio.run_coroutine_threadsafe(
-                ptm.expire_stale_trades(), _command_loop_main_loop
-            )
-            try:
-                fut.result(timeout=15)
-            except RuntimeError as e:
-                if "different loop" in str(e):
-                    _expire_stale_sync()
-                    return
-                raise
-        else:
-            _expire_stale_sync()
+        _expire_stale_sync()
     except Exception as e:
         _log(f"expire_stale: {e}")
 
