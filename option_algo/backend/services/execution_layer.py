@@ -692,6 +692,125 @@ class PendingTradeManager:
                 },
             )
 
+    @staticmethod
+    def approve_sync(
+        trade_id: int,
+        user_id: int,
+        place_order_fn: Callable,
+    ) -> 'ExecutionResult':
+        """
+        Synchronously approve a pending trade and execute it.
+        Used when called from sync context (e.g., worker thread).
+        """
+        from backend.db.database import get_sync_session
+        from sqlalchemy import select as _select
+
+        with get_sync_session() as db:
+            res = db.execute(
+                _select(PendingTrade).where(
+                    PendingTrade.id == trade_id,
+                    PendingTrade.user_id == user_id,
+                )
+            )
+            trade = res.scalar_one_or_none()
+            if not trade:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message="Pending trade not found",
+                )
+
+            if trade.status != PendingTradeStatus.WAITING:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message=f"Trade is not waiting: {trade.status.value}",
+                )
+
+            # Check expiration
+            if trade.expires_at and trade.expires_at <= datetime.now(timezone.utc).replace(tzinfo=None):
+                trade.status = PendingTradeStatus.EXPIRED
+                db.add(trade)
+                db.commit()
+                return ExecutionResult(
+                    status=ExecutionStatus.EXPIRED,
+                    message="Pending trade has expired",
+                )
+
+            # Execute the trade
+            try:
+                # Reconstruct signal from stored payload
+                signal_data = json.loads(trade.signal_payload) if trade.signal_payload else {}
+                signal = TradeSignal(**signal_data)
+
+                # Mark as approved
+                trade.status = PendingTradeStatus.APPROVED
+                trade.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                db.add(trade)
+                db.commit()
+
+                # Place the order using the engine's order placement
+                # This happens AFTER commit so the approval is recorded
+                order_id = place_order_fn(signal)
+
+                if order_id:
+                    return ExecutionResult(
+                        status=ExecutionStatus.EXECUTED,
+                        message=f"Trade #{trade_id} approved and executed: {order_id}",
+                        signal_id=trade.signal_id,
+                        trade_id=order_id,
+                        pending_trade_id=trade_id,
+                    )
+                else:
+                    return ExecutionResult(
+                        status=ExecutionStatus.FAILED,
+                        message=f"Trade #{trade_id} approved but order placement failed",
+                        signal_id=trade.signal_id,
+                        pending_trade_id=trade_id,
+                    )
+            except Exception as e:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message=f"Trade execution failed: {e}",
+                    signal_id=trade.signal_id,
+                    pending_trade_id=trade_id,
+                )
+
+    @staticmethod
+    def reject_sync(trade_id: int, user_id: int) -> 'ExecutionResult':
+        """Synchronously reject a pending trade."""
+        from backend.db.database import get_sync_session
+        from sqlalchemy import select as _select
+
+        with get_sync_session() as db:
+            res = db.execute(
+                _select(PendingTrade).where(
+                    PendingTrade.id == trade_id,
+                    PendingTrade.user_id == user_id,
+                )
+            )
+            trade = res.scalar_one_or_none()
+            if not trade:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message="Pending trade not found",
+                )
+
+            if trade.status != PendingTradeStatus.WAITING:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    message=f"Trade is not waiting: {trade.status.value}",
+                )
+
+            trade.status = PendingTradeStatus.REJECTED
+            db.add(trade)
+            db.commit()
+
+            return ExecutionResult(
+                status=ExecutionStatus.REJECTED,
+                message=f"Trade #{trade_id} rejected",
+                signal_id=trade.signal_id,
+                pending_trade_id=trade_id,
+            )
+
 
 # ================================================================
 # Global Singleton

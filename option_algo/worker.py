@@ -524,36 +524,23 @@ def _handle_approve_pending_trade(user_id: int, payload: dict,
         )
         try:
             result = fut.result(timeout=30)
-            if result.status.value in ("EXECUTED",):
-                return {
-                    "ok": True, "status": "approved",
-                    "message": result.message, "trade_id": result.trade_id,
-                }
-            elif result.status.value == "EXPIRED":
-                return {"ok": False, "error": result.message}
-            else:
-                return {"ok": False, "error": result.message}
         except Exception as e:
             return {"ok": False, "error": f"Approval failed: {e}"}
     else:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(
-                ptm.approve(trade_id, user_id, _place_order_from_signal)
-            )
-            loop.close()
-            if result.status.value in ("EXECUTED",):
-                return {
-                    "ok": True, "status": "approved",
-                    "message": result.message, "trade_id": result.trade_id,
-                }
-            elif result.status.value == "EXPIRED":
-                return {"ok": False, "error": result.message}
-            else:
-                return {"ok": False, "error": result.message}
+            result = ptm.approve_sync(trade_id, user_id, _place_order_from_signal)
         except Exception as e:
             return {"ok": False, "error": f"Approval failed: {e}"}
+
+    if result.status.value in ("EXECUTED",):
+        return {
+            "ok": True, "status": "approved",
+            "message": result.message, "trade_id": result.trade_id,
+        }
+    elif result.status.value == "EXPIRED":
+        return {"ok": False, "error": result.message}
+    else:
+        return {"ok": False, "error": result.message}
 
 
 def _handle_reject_pending_trade(user_id: int, payload: dict,
@@ -571,22 +558,17 @@ def _handle_reject_pending_trade(user_id: int, payload: dict,
         )
         try:
             result = fut.result(timeout=15)
-            if result.status.value in ("REJECTED",):
-                return {"ok": True, "status": "rejected", "message": result.message}
-            return {"ok": False, "error": result.message}
         except Exception as e:
             return {"ok": False, "error": f"Rejection failed: {e}"}
     else:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(ptm.reject(trade_id, user_id))
-            loop.close()
-            if result.status.value in ("REJECTED",):
-                return {"ok": True, "status": "rejected", "message": result.message}
-            return {"ok": False, "error": result.message}
+            result = ptm.reject_sync(trade_id, user_id)
         except Exception as e:
             return {"ok": False, "error": f"Rejection failed: {e}"}
+
+    if result.status.value in ("REJECTED",):
+        return {"ok": True, "status": "rejected", "message": result.message}
+    return {"ok": False, "error": result.message}
 
 
 def _handle_pause_resume(user_id: int, paused: bool) -> dict:
