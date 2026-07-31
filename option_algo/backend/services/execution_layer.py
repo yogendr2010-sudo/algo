@@ -72,6 +72,7 @@ class TradeSignal:
     trading_symbol: Optional[str] = None
     strike: Optional[float] = None
     regime: Optional[str] = None
+    reason: Optional[str] = None
     signal_id: str = field(default_factory=lambda: uuid4().hex[:16])
 
     def __post_init__(self):
