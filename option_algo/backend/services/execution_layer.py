@@ -801,7 +801,6 @@ class PendingTradeManager:
                 signal_id=signal.signal_id,
                 symbol=signal.trading_symbol or signal.symbol,
                 opt_type=signal.opt_type,
-                strike=signal.strike,
                 entry_price=signal.entry_price,
                 stop_loss=signal.stop_loss,
                 quantity=signal.quantity,
